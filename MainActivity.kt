@@ -123,6 +123,7 @@ private fun RefreshApp() {
     var refreshCount by remember { mutableIntStateOf(0) }
     var running by remember { mutableStateOf(true) }
     var longTime by remember { mutableStateOf(false) }
+
     val lesson = lessons[selected]
 
     Column(
@@ -164,7 +165,11 @@ private fun RefreshApp() {
                 .fillMaxWidth()
                 .height(230.dp)
                 .background(Panel, RoundedCornerShape(22.dp))
-                .border(1.dp, Color(0xFF24445F), RoundedCornerShape(22.dp))
+                .border(
+                    1.dp,
+                    Color(0xFF24445F),
+                    RoundedCornerShape(22.dp)
+                )
                 .padding(8.dp)
         ) {
             NetworkCanvas(
@@ -180,13 +185,16 @@ private fun RefreshApp() {
                     .padding(10.dp)
             ) {
                 Text(
-                    if (running) "SIMULATION RUNNING" else "SIMULATION PAUSED",
+                    if (running) "SIMULATION RUNNING"
+                    else "SIMULATION PAUSED",
                     color = if (running) Mint else Color.LightGray,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold
                 )
+
                 Text(
-                    if (longTime) "LONG TIMESCALE" else "SHORT TIMESCALE",
+                    if (longTime) "LONG TIMESCALE"
+                    else "SHORT TIMESCALE",
                     color = Color(0xFF8FAFC9),
                     fontSize = 9.sp
                 )
@@ -202,6 +210,7 @@ private fun RefreshApp() {
                 refreshCount.toString(),
                 Modifier.weight(1f)
             )
+
             MetricCard(
                 "System phase",
                 "${selected + 1}/6",
@@ -241,6 +250,7 @@ private fun RefreshApp() {
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f)
             )
+
             Text(
                 if (longTime) "Long" else "Short",
                 color = Cyan,
@@ -248,6 +258,7 @@ private fun RefreshApp() {
                     .clickable { longTime = !longTime }
                     .padding(8.dp)
             )
+
             Text(
                 "⇄",
                 color = Cyan,
@@ -270,7 +281,8 @@ private fun RefreshApp() {
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
-                        if (selected == index) Color(0xFF18344B) else Panel,
+                        if (selected == index) Color(0xFF18344B)
+                        else Panel,
                         RoundedCornerShape(15.dp)
                     )
                     .border(
@@ -295,7 +307,8 @@ private fun RefreshApp() {
                 ) {
                     Text(
                         "${index + 1}",
-                        color = if (selected == index) Night else Color.White,
+                        color = if (selected == index) Night
+                        else Color.White,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -309,6 +322,7 @@ private fun RefreshApp() {
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 14.sp
                     )
+
                     Text(
                         item.subtitle,
                         color = Color(0xFF9DB2C8),
@@ -366,7 +380,9 @@ private fun MetricCard(
             .padding(15.dp)
     ) {
         Text(label, color = Color(0xFF9DB2C8), fontSize = 11.sp)
+
         Spacer(Modifier.height(5.dp))
+
         Text(
             value,
             color = Color.White,
@@ -414,31 +430,48 @@ private fun NetworkCanvas(
         )
 
         val edges = listOf(
-            0 to 1, 1 to 2, 2 to 3, 3 to 4,
-            0 to 5, 5 to 6, 6 to 7, 7 to 8,
-            8 to 9, 2 to 10, 10 to 7, 1 to 6,
-            3 to 8, 5 to 2, 7 to 9
+            0 to 1,
+            1 to 2,
+            2 to 3,
+            3 to 4,
+            0 to 5,
+            5 to 6,
+            6 to 7,
+            7 to 8,
+            8 to 9,
+            2 to 10,
+            10 to 7,
+            1 to 6,
+            3 to 8,
+            5 to 2,
+            7 to 9
         )
 
         edges.forEachIndexed { i, e ->
             val visible = (stage == 0 && i > 6) ||
-                (longTime && i % 4 == 0)
+                    (longTime && i % 4 == 0)
 
             drawLine(
-                if (visible) Color(0xFF2D617A)
-                else Color(0xFF269FC8).copy(
-                    alpha = if (running) .35f + pulse * .45f else .2f
-                ),
-                points[e.first],
-                points[e.second],
+                color = if (visible) {
+                    Color(0xFF2D617A)
+                } else {
+                    Color(0xFF269FC8).copy(
+                        alpha = if (running) .35f + pulse * .45f
+                        else .2f
+                    )
+                },
+                start = points[e.first],
+                end = points[e.second],
                 strokeWidth = if (visible) 1.3f else 2f,
                 cap = StrokeCap.Round
             )
         }
 
         points.forEachIndexed { i, p ->
+            // Fixed: pulse * 2.2f
             val radius = if (running) 4f + pulse * 2.2f else 4f
 
+            // Fixed: radius * 2.6f
             drawCircle(
                 Color(0xFF56E2FF).copy(alpha = .15f),
                 radius = radius * 2.6f,
