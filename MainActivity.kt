@@ -123,7 +123,6 @@ private fun RefreshApp() {
     var refreshCount by remember { mutableIntStateOf(0) }
     var running by remember { mutableStateOf(true) }
     var longTime by remember { mutableStateOf(false) }
-
     val lesson = lessons[selected]
 
     Column(
@@ -165,11 +164,7 @@ private fun RefreshApp() {
                 .fillMaxWidth()
                 .height(230.dp)
                 .background(Panel, RoundedCornerShape(22.dp))
-                .border(
-                    1.dp,
-                    Color(0xFF24445F),
-                    RoundedCornerShape(22.dp)
-                )
+                .border(1.dp, Color(0xFF24445F), RoundedCornerShape(22.dp))
                 .padding(8.dp)
         ) {
             NetworkCanvas(
@@ -185,16 +180,13 @@ private fun RefreshApp() {
                     .padding(10.dp)
             ) {
                 Text(
-                    if (running) "SIMULATION RUNNING"
-                    else "SIMULATION PAUSED",
+                    if (running) "SIMULATION RUNNING" else "SIMULATION PAUSED",
                     color = if (running) Mint else Color.LightGray,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold
                 )
-
                 Text(
-                    if (longTime) "LONG TIMESCALE"
-                    else "SHORT TIMESCALE",
+                    if (longTime) "LONG TIMESCALE" else "SHORT TIMESCALE",
                     color = Color(0xFF8FAFC9),
                     fontSize = 9.sp
                 )
@@ -249,7 +241,6 @@ private fun RefreshApp() {
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f)
             )
-
             Text(
                 if (longTime) "Long" else "Short",
                 color = Cyan,
@@ -257,7 +248,6 @@ private fun RefreshApp() {
                     .clickable { longTime = !longTime }
                     .padding(8.dp)
             )
-
             Text(
                 "⇄",
                 color = Cyan,
@@ -280,8 +270,7 @@ private fun RefreshApp() {
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
-                        if (selected == index) Color(0xFF18344B)
-                        else Panel,
+                        if (selected == index) Color(0xFF18344B) else Panel,
                         RoundedCornerShape(15.dp)
                     )
                     .border(
