@@ -1,442 +1,248 @@
-
 package com.refreshsystem.simulator
 
+import android.content.Context
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
-import kotlin.math.sqrt
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlin.random.Random
 
-private data class Node(
-    val id: Int,
-    val x: Float,
-    val y: Float,
-    val energy: Float = 0.5f
-)
-
-private data class Link(
-    val a: Int,
-    val b: Int,
-    val strength: Float = 0.5f
-)
-
-private data class MemoryRecord(
-    val id: Int,
-    val text: String,
-    val tick: Int
-)
-
-private data class HistoryEvent(
-    val tick: Int,
-    val message: String
-)
+private val Ink = Color(0xFF10131C)
+private val Panel = Color(0xFF1A2030)
+private val Red = Color(0xFFFF3B45)
+private val Cyan = Color(0xFF6BE7F2)
+private val Muted = Color(0xFFB7C0D3)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme {
-                RefreshApp()
-            }
+            MaterialTheme(colorScheme = darkColorScheme(
+                background = Ink, surface = Panel, primary = Red,
+                onBackground = Color.White, onSurface = Color.White
+            )) { RefreshTheoryApp() }
         }
     }
 }
 
 @Composable
-private fun RefreshApp() {
-    var running by remember { mutableStateOf(true) }
+private fun RefreshTheoryApp() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val prefs = remember { context.getSharedPreferences("refresh_theory", Context.MODE_PRIVATE) }
+    var tab by remember { mutableIntStateOf(0) }
+    var photoUri by remember { mutableStateOf(prefs.getString("photo_uri", null)?.let(Uri::parse)) }
+    var photoBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var name by remember { mutableStateOf(prefs.getString("user_name", "") ?: "") }
+    var memoryInput by remember { mutableStateOf("") }
+    val memories = remember {
+        mutableStateListOf<String>().apply {
+            addAll((prefs.getString("memories", "") ?: "").split("\n").filter { it.isNotBlank() })
+        }
+    }
+    val events = remember { mutableStateListOf<String>() }
     var tick by remember { mutableIntStateOf(0) }
-    var nextId by remember { mutableIntStateOf(20) }
-    var environment by remember { mutableFloatStateOf(0.5f) }
-    var internalEnvironment by remember { mutableFloatStateOf(0.5f) }
-    var selectedTab by remember { mutableIntStateOf(0) }
-    var memoryText by remember { mutableStateOf("") }
-    var stability by remember { mutableFloatStateOf(1f) }
-    var continuity by remember { mutableFloatStateOf(1f) }
+    var running by remember { mutableStateOf(true) }
+    var environment by remember { mutableFloatStateOf(.5f) }
+    var internalState by remember { mutableFloatStateOf(.5f) }
+    var stability by remember { mutableFloatStateOf(.72f) }
+    var activeLesson by remember { mutableIntStateOf(0) }
+    val lessons = remember {
+        listOf(
+            "REFRESH PROCESS" to "सिस्टम की स्थिति समय के साथ अपडेट होती है। बदलाव होना और संगठन बने रहना एक साथ संभव हैं।",
+            "OPEN SYSTEM" to "Open System वातावरण से ऊर्जा, पदार्थ या संकेत ले सकता है और बाहर भेज सकता है।",
+            "STABILITY" to "इस मॉडल में Stability का मतलब है—बदलाव के बावजूद जरूरी संगठन और कार्यक्षमता कितनी बनी रहती है।",
+            "INFORMATION RETENTION" to "रिकॉर्ड की गई जानकारी बाद में खोजी जा सकती है और वर्तमान निर्णय को प्रभावित कर सकती है।",
+            "IDENTITY & MEMORY" to "यादें व्यवहार को प्रभावित कर सकती हैं; इससे अपने-आप यह सिद्ध नहीं होता कि सिस्टम सचमुच अनुभव करता है।",
+            "RESEARCH QUESTION" to "क्या Stability और जानकारी बनाए रखने के बीच ऐसा संबंध है जो चेतना को समझने में मदद करे? इसे प्रयोग से जाँचना होगा।"
+        )
+    }
 
-    val nodes = remember {
-        mutableStateListOf<Node>().apply {
-            repeat(12) { i ->
-                val angle = i * 0.5236f
-                add(
-                    Node(
-                        i,
-                        0.5f + 0.35f * kotlin.math.cos(angle),
-                        0.5f + 0.35f * kotlin.math.sin(angle)
-                    )
-                )
-            }
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            try { context.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) { }
+            photoUri = uri
+            prefs.edit().putString("photo_uri", uri.toString()).apply()
         }
     }
 
-    val links = remember {
-        mutableStateListOf<Link>().apply {
-            for (i in 0 until 12) {
-                add(Link(i, (i + 1) % 12))
-                if (i % 2 == 0) add(Link(i, (i + 3) % 12))
-            }
-        }
+    LaunchedEffect(photoUri) {
+        photoBitmap = null
+        val uri = photoUri ?: return@LaunchedEffect
+        try { context.contentResolver.openInputStream(uri)?.use { photoBitmap = BitmapFactory.decodeStream(it) } } catch (_: Exception) { }
     }
 
-    val memories = remember { mutableStateListOf<MemoryRecord>() }
-    val history = remember { mutableStateListOf<HistoryEvent>() }
-
-    fun log(message: String) {
-        history.add(0, HistoryEvent(tick, message))
-        while (history.size > 100) history.removeAt(history.lastIndex)
-    }
-
-    fun refreshSystem() {
-        tick++
-
-        // पुराने रिकॉर्ड और वर्तमान आंतरिक स्थिति अगले बदलावों को प्रभावित करते हैं।
-        val memoryInfluence =
-            (memories.size.coerceAtMost(10) / 10f) * 0.15f
-
-        internalEnvironment = (
-            internalEnvironment * 0.65f +
-                environment * 0.20f +
-                memoryInfluence +
-                Random.nextFloat() * 0.08f
-            ).coerceIn(0f, 1f)
-
-        // कनेक्शन टूट सकते हैं।
-        if (links.isNotEmpty() && Random.nextFloat() < 0.65f) {
-            val index = Random.nextInt(links.size)
-            val removed = links.removeAt(index)
-            log("कनेक्शन ${removed.a}–${removed.b} टूट गया")
-        }
-
-        // आंतरिक वातावरण और इतिहास नए कनेक्शन बनने की संभावना को प्रभावित करते हैं।
-        val joinChance = (
-            0.25f + internalEnvironment * 0.35f +
-                memoryInfluence
-            ).coerceIn(0.1f, 0.8f)
-
-        if (nodes.size >= 2 && Random.nextFloat() < joinChance) {
-            val a = nodes.random().id
-            val possible = nodes.filter {
-                it.id != a && links.none { link ->
-                    (link.a == a && link.b == it.id) ||
-                        (link.a == it.id && link.b == a)
-                }
-            }
-
-            if (possible.isNotEmpty()) {
-                val b = possible.random().id
-                links.add(
-                    Link(
-                        a,
-                        b,
-                        (0.3f + internalEnvironment * 0.5f)
-                            .coerceIn(0f, 1f)
-                    )
-                )
-                log("नया कनेक्शन $a–$b बना")
-            }
-        }
-
-        // धीरे-धीरे संरचना भी बदलती है।
-        if (tick % 8 == 0 && nodes.size < 30) {
-            val angle = Random.nextFloat() * 6.28318f
-            val id = nextId++
-            nodes.add(
-                Node(
-                    id,
-                    (0.5f + 0.35f * kotlin.math.cos(angle))
-                        .coerceIn(0.05f, 0.95f),
-                    (0.5f + 0.35f * kotlin.math.sin(angle))
-                        .coerceIn(0.05f, 0.95f)
-                )
-            )
-            log("सिस्टम में नया हिस्सा $id जुड़ा")
-        }
-
-        if (tick % 15 == 0 && nodes.size > 8) {
-            val removed = nodes.removeAt(Random.nextInt(nodes.size))
-            links.removeAll { it.a == removed.id || it.b == removed.id }
-            log("हिस्सा ${removed.id} सिस्टम से अलग हुआ")
-        }
-
-        // ये मॉडल-आधारित अनुमान हैं, वास्तविक चेतना का माप नहीं।
-        val possibleLinks = (nodes.size * (nodes.size - 1) / 2)
-            .coerceAtLeast(1)
-        val connectivity = (links.size.toFloat() / possibleLinks)
-            .coerceIn(0f, 1f)
-
-        val organization = (
-            0.55f * connectivity.coerceAtMost(1f) +
-                0.45f * (1f - kotlin.math.abs(
-                    internalEnvironment - 0.5f
-                ))
-            ).coerceIn(0f, 1f)
-
-        stability = organization
-
-        continuity = (
-            0.5f + memories.size.coerceAtMost(10) * 0.035f +
-                (1f - kotlin.math.abs(
-                    internalEnvironment - environment
-                )) * 0.15f
-            ).coerceIn(0f, 1f)
+    LaunchedEffect(activeLesson) {
+        delay(6000)
+        activeLesson = (activeLesson + 1) % lessons.size
     }
 
     LaunchedEffect(running) {
         while (running) {
-            delay(900)
-            refreshSystem()
+            delay(1100)
+            tick++
+            internalState = (internalState * .62f + environment * .23f + Random.nextFloat() * .15f).coerceIn(0f, 1f)
+            val event = if (Random.nextBoolean()) "एक connection टूटा; सिस्टम में नया संबंध बनने की संभावना बनी।" else "दो हिस्सों के बीच नया connection बना।"
+            events.add(0, "Refresh $tick: $event")
+            while (events.size > 40) events.removeAt(events.lastIndex)
+            val connectivity = .58f + Random.nextFloat() * .25f
+            stability = (connectivity * .55f + (1f - kotlin.math.abs(internalState - .5f)) * .45f).coerceIn(.05f, 1f)
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(16.dp)
-    ) {
-        Text(
-            "Refresh System",
-            style = MaterialTheme.typography.headlineMedium
-        )
-        Text(
-            "बदलते हुए भी सिस्टम का बना रहना",
-            style = MaterialTheme.typography.bodyMedium
-        )
-
-        Spacer(Modifier.height(12.dp))
-
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("System", "Memory", "Experiments", "Theory")
-                .forEachIndexed { index, title ->
-                    FilterChip(
-                        selected = selectedTab == index,
-                        onClick = { selectedTab = index },
-                        label = { Text(title) }
-                    )
-                }
-        }
-
-        Spacer(Modifier.height(12.dp))
-
-        when (selectedTab) {
-            0 -> {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { running = !running }) {
-                        Text(if (running) "Pause" else "Resume")
-                    }
-                    OutlinedButton(onClick = { refreshSystem() }) {
-                        Text("Refresh Now")
-                    }
-                }
-
-                Spacer(Modifier.height(8.dp))
-
-                Text("Refresh: $tick")
-                Text("हिस्से: ${nodes.size}   कनेक्शन: ${links.size}")
-
-                Text("Stability (मॉडल): ${(stability * 100).toInt()}%")
-                LinearProgressIndicator(
-                    progress = { stability },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Text("Continuity (मॉडल): ${(continuity * 100).toInt()}%")
-                LinearProgressIndicator(
-                    progress = { continuity },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(Modifier.height(8.dp))
-
-                Text("आंतरिक वातावरण: ${(internalEnvironment * 100).toInt()}%")
-                LinearProgressIndicator(
-                    progress = { internalEnvironment },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Text("बाहरी वातावरण")
-                Slider(
-                    value = environment,
-                    onValueChange = { environment = it },
-                    valueRange = 0f..1f
-                )
-
-                NetworkView(nodes, links, Modifier.weight(1f))
+    Column(Modifier.fillMaxSize().background(Ink).verticalScroll(rememberScrollState()).padding(16.dp)) {
+        Text("REFRESH THEORY", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black, color = Color.White)
+        Text("एक बदलता हुआ Open System • प्रयोगात्मक मॉडल", color = Muted)
+        Spacer(Modifier.height(14.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+            listOf("रोबोट", "प्रयोग", "सीखें").forEachIndexed { i, label ->
+                FilterChip(selected = tab == i, onClick = { tab = i }, label = { Text(label) })
             }
-
-            1 -> {
-                Text("इतिहास और याददाश्त")
-                OutlinedTextField(
-                    value = memoryText,
-                    onValueChange = { memoryText = it },
-                    label = { Text("जानकारी दर्ज करें") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Button(
-                    onClick = {
-                        if (memoryText.isNotBlank()) {
-                            memories.add(
-                                MemoryRecord(
-                                    memories.size + 1,
-                                    memoryText.trim(),
-                                    tick
-                                )
-                            )
-                            log("नई जानकारी रिकॉर्ड हुई")
-                            memoryText = ""
-                        }
-                    }
-                ) {
-                    Text("Record Memory")
-                }
-
-                LazyColumn {
-                    items(memories) { memory ->
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp)
-                        ) {
-                            Column(Modifier.padding(12.dp)) {
-                                Text(memory.text)
-                                Text(
-                                    "रिकॉर्ड #${memory.id} • Refresh ${memory.tick}",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                                TextButton(
-                                    onClick = {
-                                        memories.remove(memory)
-                                        log("रिकॉर्ड #${memory.id} हटाया गया")
-                                    }
-                                ) {
-                                    Text("Delete")
+        }
+        Spacer(Modifier.height(14.dp))
+        when (tab) {
+            0 -> {
+                Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(24.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("बॉक्स 1 • मेरा डिजिटल रोबोट", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(12.dp))
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(190.dp)) {
+                            Canvas(Modifier.fillMaxSize()) {
+                                drawCircle(Red.copy(alpha = .10f), size.minDimension * .48f)
+                                drawCircle(Red.copy(alpha = .38f), size.minDimension * .42f, style = androidx.compose.ui.graphics.drawscope.Stroke(4.dp.toPx()))
+                            }
+                            if (photoBitmap != null) {
+                                Image(photoBitmap!!.asImageBitmap(), contentDescription = "आपकी चुनी हुई फोटो", modifier = Modifier.size(142.dp).clip(CircleShape))
+                            } else {
+                                Box(Modifier.size(142.dp).clip(CircleShape).background(Color(0xFF30394C)), contentAlignment = Alignment.Center) {
+                                    Text("अपनी\nफोटो चुनें", color = Color.White, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
-                    }
-                }
-            }
-
-            2 -> {
-                Text("प्रयोग और इतिहास")
-                Text("कनेक्शन और वातावरण के बदलाव का रिकॉर्ड")
-                LazyColumn {
-                    items(history) { event ->
-                        ListItem(
-                            headlineContent = { Text(event.message) },
-                            supportingContent = {
-                                Text("Refresh ${event.tick}")
+                        Button(onClick = { photoPicker.launch(arrayOf("image/*")) }) { Text("अपनी फोटो चुनें") }
+                        OutlinedTextField(value = name, onValueChange = { name = it; prefs.edit().putString("user_name", it).apply() }, label = { Text("आपका नाम (वैकल्पिक)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        Spacer(Modifier.height(8.dp))
+                        Text("यह मॉडल आपकी दी हुई यादों से सीखने और निर्णय लेने का प्रदर्शन करता है। फोटो अभी केवल पहचान-चित्र है; यह अपने-आप रोबोट चेहरा नहीं बनाती।", color = Muted, style = MaterialTheme.typography.bodySmall)
+                        HorizontalDivider(Modifier.padding(vertical = 12.dp), color = Color.DarkGray)
+                        Text("यादें", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        OutlinedTextField(value = memoryInput, onValueChange = { memoryInput = it }, label = { Text("अपने बारे में कोई बात लिखें") }, modifier = Modifier.fillMaxWidth())
+                        Button(onClick = {
+                            if (memoryInput.isNotBlank()) {
+                                memories.add(0, memoryInput.trim())
+                                prefs.edit().putString("memories", memories.joinToString("\n")).apply()
+                                events.add(0, "नई याद रिकॉर्ड हुई: ${memoryInput.trim().take(45)}")
+                                memoryInput = ""
                             }
-                        )
-                        HorizontalDivider()
+                        }, modifier = Modifier.fillMaxWidth()) { Text("याद सुरक्षित करें") }
+                        if (memories.isNotEmpty()) {
+                            Text("सिस्टम की यादें (${memories.size})", fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.Start))
+                            memories.take(8).forEach { item -> Text("• $item", color = Muted, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) }
+                        }
+                        Button(onClick = {
+                            val chosen = memories.firstOrNull()
+                            events.add(0, if (chosen != null) "निर्णय मॉडल: उपलब्ध याद '${chosen.take(45)}' को ध्यान में रखकर अगला निर्णय चुनना होगा।" else "निर्णय मॉडल: अभी कोई याद नहीं; पहले जानकारी रिकॉर्ड करें।")
+                        }, modifier = Modifier.fillMaxWidth()) { Text("यादों के आधार पर निर्णय का उदाहरण") }
                     }
                 }
             }
-
-            3 -> {
-                Text(
-                    "Refresh Theory",
-                    style = MaterialTheme.typography.titleLarge
-                )
-                Spacer(Modifier.height(8.dp))
-
-                Text(
-                    "मुख्य दावा: चेतना Open System की Stability है।"
-                )
-                Spacer(Modifier.height(8.dp))
-
-                Text(
-                    "Stability का अर्थ है कि सिस्टम लगातार बदलते हुए भी " +
-                        "अपना व्यापक संगठन बनाए रख सकता है।"
-                )
-                Spacer(Modifier.height(8.dp))
-
-                Text(
-                    "कनेक्शन टूटते और बनते हैं। आंतरिक वातावरण बदलता है। " +
-                        "पुराने रिकॉर्ड वर्तमान व्यवहार और आगे बनने वाले " +
-                        "कनेक्शनों को प्रभावित कर सकते हैं।"
-                )
-                Spacer(Modifier.height(8.dp))
-
-                Text(
-                    "यह ऐप Refresh Theory पर आधारित एक प्रयोगात्मक " +
-                        "सिमुलेशन है। Stability और Continuity के आँकड़े " +
-                        "इस ऐप के नियमों से निकलते हैं; वे वास्तविक " +
-                        "चेतना का वैज्ञानिक प्रमाण नहीं हैं।"
-                )
-
+            1 -> {
+                Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(24.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                        Text("बॉक्स 2 • Natural Open System", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text("Refresh $tick • Connections बदलते रहते हैं", color = Muted)
+                        Spacer(Modifier.height(8.dp))
+                        StabilityRing(stability)
+                        Text("Stability (मॉडल सूचक): ${(stability * 100).toInt()}%", fontWeight = FontWeight.Bold)
+                        LinearProgressIndicator(progress = { stability }, modifier = Modifier.fillMaxWidth(), color = Red)
+                        Text("आंतरिक स्थिति: ${(internalState * 100).toInt()}%")
+                        Text("बाहरी वातावरण")
+                        Slider(value = environment, onValueChange = { environment = it }, valueRange = 0f..1f)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = { running = !running }) { Text(if (running) "रोकें" else "फिर चलाएँ") }
+                            OutlinedButton(onClick = { tick++; events.add(0, "Manual Refresh $tick: एक नया बदलाव दर्ज हुआ।") }) { Text("एक Refresh") }
+                        }
+                        Text("Stability यहाँ ऐप के नियमों से निकला मॉडल सूचक है—चेतना का माप या प्रमाण नहीं।", color = Muted, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
                 Spacer(Modifier.height(12.dp))
-                Text("वर्तमान इतिहास: ${memories.size} रिकॉर्ड")
-                Text("कनेक्शन: ${links.size}")
+                Text("हाल के बदलाव", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                events.take(15).forEach { Text("• $it", color = Muted, modifier = Modifier.padding(vertical = 3.dp)) }
+            }
+            else -> {
+                Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(24.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                        Text("बॉक्स 3 • Refresh Theory सीखें", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text("शैक्षिक स्लाइड अपने-आप बदलती रहेंगी", color = Muted)
+                        Spacer(Modifier.height(14.dp))
+                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF2A1822)), shape = RoundedCornerShape(18.dp)) {
+                            Column(Modifier.fillMaxWidth().padding(18.dp)) {
+                                Text(lessons[activeLesson].first, color = Red, fontWeight = FontWeight.Black)
+                                Spacer(Modifier.height(10.dp))
+                                Text(lessons[activeLesson].second, style = MaterialTheme.typography.titleMedium)
+                                Spacer(Modifier.height(18.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("${activeLesson + 1} / ${lessons.size}", color = Muted)
+                                    Spacer(Modifier.weight(1f))
+                                    Button(onClick = { activeLesson = (activeLesson + 1) % lessons.size }) { Text("अगली स्लाइड") }
+                                }
+                            }
+                        }
+                        Text("नोट: यह टेक्स्ट-आधारित ऑटो-स्लाइड प्रोटोटाइप है। वीडियो क्लिप और असली विज्ञापन नेटवर्क अगले विकास चरण में जोड़े जा सकते हैं।", color = Muted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 12.dp))
+                    }
+                }
             }
         }
+        Spacer(Modifier.height(18.dp))
+        Text("शोध-सिद्धांत: ‘चेतना Open System की Stability है’ हमारी परिकल्पना है। ऐप व्यवहार, याददाश्त और सिस्टम बदलावों को जाँचता है; यह अकेले चेतना सिद्ध नहीं करता।", color = Muted, style = MaterialTheme.typography.bodySmall)
     }
 }
 
 @Composable
-private fun NetworkView(
-    nodes: List<Node>,
-    links: List<Link>,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp)
-    ) {
-        Canvas(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(8.dp)
-        ) {
-            val byId = nodes.associateBy { it.id }
-
-            links.forEach { link ->
-                val a = byId[link.a]
-                val b = byId[link.b]
-
-                if (a != null && b != null) {
-                    drawLine(
-                        color = Color(0xFF5B8DEF).copy(
-                            alpha = link.strength.coerceIn(0.2f, 1f)
-                        ),
-                        start = Offset(
-                            a.x * size.width,
-                            a.y * size.height
-                        ),
-                        end = Offset(
-                            b.x * size.width,
-                            b.y * size.height
-                        ),
-                        strokeWidth = 2.dp.toPx()
-                    )
-                }
-            }
-
-            nodes.forEach { node ->
-                drawCircle(
-                    color = Color(0xFF19A974),
-                    radius = 6.dp.toPx(),
-                    center = Offset(
-                        node.x * size.width,
-                        node.y * size.height
-                    )
-                )
-            }
+private fun StabilityRing(stability: Float) {
+    val transition = rememberInfiniteTransition(label = "ring")
+    val pulse by transition.animateFloat(initialValue = .92f, targetValue = 1.05f,
+        animationSpec = infiniteRepeatable(tween(1200), RepeatMode.Reverse), label = "pulse")
+    Canvas(Modifier.fillMaxWidth().height(240.dp)) {
+        val center = Offset(size.width / 2, size.height / 2)
+        val radius = size.minDimension * .34f * pulse
+        drawCircle(Red.copy(alpha = .10f), radius * 1.35f, center)
+        drawCircle(Red.copy(alpha = .18f), radius * 1.16f, center)
+        drawCircle(Red.copy(alpha = .9f), radius, center, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 8.dp.toPx()))
+        drawCircle(Cyan.copy(alpha = .85f), radius * .55f, center, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
+        repeat(18) { i ->
+            val angle = (i * 2.0 * PI / 18.0) + (System.currentTimeMillis() % 4000L) / 4000.0 * 2.0 * PI
+            val r = radius * (.35f + ((i * 17) % 60) / 100f)
+            val point = Offset(center.x + cos(angle).toFloat() * r, center.y + sin(angle).toFloat() * r)
+            drawCircle(if (i % 3 == 0) Color.White else Red, if (i % 3 == 0) 3.dp.toPx() else 2.dp.toPx(), point)
         }
     }
 }
