@@ -1,620 +1,298 @@
 
 package com.refreshsystem.simulator
 
-import android.content.pm.PackageManager
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.camera.core.CameraSelector
-import androidx.camera.core.ImageAnalysis
-import androidx.camera.core.ImageProxy
-import androidx.camera.core.Preview
-import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.camera.view.PreviewView
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.content.ContextCompat
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.face.FaceDetection
-import com.google.mlkit.vision.face.FaceDetector
-import com.google.mlkit.vision.face.FaceDetectorOptions
-import com.google.mlkit.vision.label.ImageLabeler
-import com.google.mlkit.vision.label.ImageLabeling
-import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
-import java.util.concurrent.Executors
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.sin
 
-private val Ink = Color(0xFF10131C)
-private val Panel = Color(0xFF1A2030)
-private val Red = Color(0xFFFF3B45)
-private val Cyan = Color(0xFF6BE7F2)
-private val Muted = Color(0xFFB7C0D3)
-
-class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: android.os.Bundle?) {
-        super.onCreate(savedInstanceState)
-
-        setContent {
-            MaterialTheme(
-                colorScheme = darkColorScheme(
-                    background = Ink,
-                    surface = Panel,
-                    primary = Red,
-                    onBackground = Color.White,
-                    onSurface = Color.White
-                )
-            ) {
-                RefreshTheoryApp()
-            }
-        }
-    }
-}
+private val RobotBackground = Color(0xFF10131C)
+private val RobotPanel = Color(0xFF1A2030)
+private val RobotCyan = Color(0xFF6BE7F2)
+private val RobotMuted = Color(0xFFB7C0D3)
 
 @Composable
-private fun RefreshTheoryApp() {
-    var selectedTab by remember { mutableIntStateOf(0) }
+fun RobotWorldScreen() {
+    var cameraEnabled by remember { mutableStateOf(false) }
+    var observation by remember {
+        mutableStateOf("अभी कोई नया observation नहीं है।")
+    }
+    var faceCount by remember { mutableIntStateOf(0) }
+    var refreshCount by remember { mutableIntStateOf(0) }
+    var environment by remember { mutableFloatStateOf(0.5f) }
+    var internalState by remember { mutableFloatStateOf(0.5f) }
+    var stability by remember { mutableFloatStateOf(0.75f) }
+    var memoryInput by remember { mutableStateOf("") }
+
+    val memories = remember { mutableStateListOf<String>() }
+
+    fun refreshSystem() {
+        refreshCount++
+
+        internalState = (
+            internalState * 0.65f +
+                environment * 0.35f
+            ).coerceIn(0f, 1f)
+
+        stability = (
+            1f - kotlin.math.abs(internalState - environment)
+            ).coerceIn(0f, 1f)
+    }
 
     Column(
         modifier = Modifier
-            .fillMaxSize()
-            .background(Ink)
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp)
+            .fillMaxWidth()
+            .background(
+                RobotBackground,
+                RoundedCornerShape(20.dp)
+            )
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Text(
-            text = "REFRESH THEORY",
-            style = MaterialTheme.typography.headlineMedium,
+            text = "ROBOT WORLD",
+            style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Black,
             color = Color.White
         )
 
-        Spacer(Modifier.height(4.dp))
-
         Text(
-            text = "Open System • Refresh • Stability • Information",
-            color = Muted
-        )
-
-        Spacer(Modifier.height(16.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            listOf("Robot", "Experiment", "Learn")
-                .forEachIndexed { index, title ->
-                    FilterChip(
-                        selected = selectedTab == index,
-                        onClick = { selectedTab = index },
-                        label = { Text(title) },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        when (selectedTab) {
-            0 -> RobotWorldScreen()
-            1 -> ExperimentScreen()
-            2 -> LearnScreen()
-        }
-
-        Spacer(Modifier.height(18.dp))
-
-        Text(
-            text = "Research hypothesis: “Consciousness is the Stability of an Open System.” " +
-                "यह ऐप व्यवहार, जानकारी और बदलाव का simulation है; यह चेतना का वैज्ञानिक प्रमाण नहीं है।",
-            color = Muted,
+            text = "Open System • Observation • Memory • Refresh",
+            color = RobotMuted,
             style = MaterialTheme.typography.bodySmall
         )
-    }
-}
 
-@Composable
-private fun ExperimentScreen() {
-    var refreshCount by remember { mutableIntStateOf(0) }
-    var environment by remember { mutableFloatStateOf(0.5f) }
-    var internalState by remember { mutableFloatStateOf(0.5f) }
-    var stability by remember { mutableFloatStateOf(0.72f) }
-    var running by remember { mutableStateOf(false) }
-
-    LaunchedEffect(running) {
-        while (running) {
-            kotlinx.coroutines.delay(1200)
-
-            refreshCount++
-
-            internalState = (
-                internalState * 0.65f +
-                    environment * 0.25f +
-                    kotlin.random.Random.nextFloat() * 0.10f
-                ).coerceIn(0f, 1f)
-
-            stability = (
-                0.60f +
-                    (1f - kotlin.math.abs(internalState - environment)) * 0.40f
-                ).coerceIn(0f, 1f)
-        }
-    }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Panel),
-        shape = RoundedCornerShape(22.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = RobotPanel
+            ),
+            shape = RoundedCornerShape(16.dp)
         ) {
-            Text(
-                "OPEN SYSTEM EXPERIMENT",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Black
-            )
-
-            Text(
-                "यह प्रयोग environment, internal state और Stability के बीच संबंध का एक सरल मॉडल है।",
-                color = Muted
-            )
-
-            StabilityRing(stability)
-
-            Text("Refresh Count: $refreshCount")
-            Text("Stability: ${(stability * 100).toInt()}%")
-
-            LinearProgressIndicator(
-                progress = { stability },
-                modifier = Modifier.fillMaxWidth(),
-                color = Cyan
-            )
-
-            Text("Internal State: ${(internalState * 100).toInt()}%")
-            Text("External Environment")
-
-            Slider(
-                value = environment,
-                onValueChange = { environment = it },
-                valueRange = 0f..1f
-            )
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = { running = !running },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(if (running) "Pause" else "Start Experiment")
-                }
-
-                OutlinedButton(
-                    onClick = {
-                        refreshCount++
-
-                        internalState = (
-                            (internalState + environment) / 2f
-                            ).coerceIn(0f, 1f)
-
-                        stability = (
-                            1f - kotlin.math.abs(internalState - environment) * 0.4f
-                            ).coerceIn(0f, 1f)
-                    },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Manual Refresh")
-                }
-            }
-
-            Text(
-                "यहाँ Stability गणितीय नियम से निकला simulation score है, वास्तविक चेतना का माप नहीं।",
-                color = Muted,
-                style = MaterialTheme.typography.bodySmall
-            )
-        }
-    }
-}
-
-@Composable
-private fun LearnScreen() {
-    val lessons = listOf(
-        "Refresh Process" to
-            "सिस्टम के हिस्से समय के साथ बदलते और अपडेट होते हैं।",
-
-        "Open System" to
-            "Open System अपने वातावरण से ऊर्जा, पदार्थ या संकेत लेता और बाहर भेजता है।",
-
-        "Stability" to
-            "बदलाव के दौरान सिस्टम के जरूरी संगठन को बनाए रखने की क्षमता को इस मॉडल में Stability कहा गया है।",
-
-        "Information Retention" to
-            "जानकारी रिकॉर्ड होने पर उसे बाद में वापस पढ़ा या इस्तेमाल किया जा सकता है।",
-
-        "Memory और Consciousness" to
-            "जानकारी रिकॉर्ड करना और उसे सचेत रूप से महसूस करना एक ही बात नहीं है।",
-
-        "Refresh Theory" to
-            "यह प्रस्तावित परिकल्पना है कि Open System की Stability और Information Retention का चेतना से संबंध हो सकता है। इसे प्रयोगों से जाँचना आवश्यक है।"
-    )
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Panel),
-        shape = RoundedCornerShape(22.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                "LEARN REFRESH THEORY",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Black
-            )
-
-            lessons.forEachIndexed { index, lesson ->
-                HorizontalDivider(color = Color.DarkGray)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    "1. Camera Observation",
+                    fontWeight = FontWeight.Bold,
+                    color = RobotCyan
+                )
 
                 Text(
-                    "${index + 1}. ${lesson.first}",
-                    color = Cyan,
+                    "कैमरा चालू करने पर ऐप चेहरे और दृश्य के कुछ labels पहचानने की कोशिश करेगा।",
+                    color = Color.White
+                )
+
+                CameraPanel(
+                    enabled = cameraEnabled,
+                    onEnabledChange = { cameraEnabled = it },
+                    onObservation = { result, faces ->
+                        observation = result
+                        faceCount = faces
+                        refreshSystem()
+                    }
+                )
+
+                Text(
+                    text = "Latest observation: $observation",
+                    color = RobotMuted,
+                    style = MaterialTheme.typography.bodySmall
+                )
+
+                Text(
+                    text = "Detected faces: $faceCount",
+                    color = Color.White
+                )
+            }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = RobotPanel
+            ),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    "2. Refresh System",
+                    fontWeight = FontWeight.Bold,
+                    color = RobotCyan
+                )
+
+                Text(
+                    "Refresh Count: $refreshCount",
+                    color = Color.White
+                )
+
+                Text(
+                    "Internal State: ${(internalState * 100).toInt()}%",
+                    color = Color.White
+                )
+
+                Text(
+                    "Stability Score: ${(stability * 100).toInt()}%",
+                    color = Color.White
+                )
+
+                LinearProgressIndicator(
+                    progress = { stability },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = RobotCyan
+                )
+
+                Text(
+                    "External Environment: ${(environment * 100).toInt()}%",
+                    color = RobotMuted
+                )
+
+                Slider(
+                    value = environment,
+                    onValueChange = { environment = it },
+                    valueRange = 0f..1f
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = { refreshSystem() },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Refresh Now")
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            refreshCount = 0
+                            internalState = 0.5f
+                            stability = 0.75f
+                            environment = 0.5f
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Reset")
+                    }
+                }
+            }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = RobotPanel
+            ),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    "3. Information Retention",
+                    fontWeight = FontWeight.Bold,
+                    color = RobotCyan
+                )
+
+                Text(
+                    "यहाँ तुम जानकारी जोड़ सकते हो। यह इस स्क्रीन की अस्थायी memory list में रहेगी।",
+                    color = RobotMuted
+                )
+
+                OutlinedTextField(
+                    value = memoryInput,
+                    onValueChange = { memoryInput = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("जानकारी लिखें") },
+                    placeholder = { Text("उदाहरण: सामने एक चेहरा दिखा") },
+                    singleLine = false
+                )
+
+                Button(
+                    onClick = {
+                        val entry = memoryInput.trim()
+                        if (entry.isNotEmpty()) {
+                            memories.add(0, entry)
+                            memoryInput = ""
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Save Information")
+                }
+
+                Text(
+                    "Saved entries: ${memories.size}",
+                    color = Color.White,
                     fontWeight = FontWeight.Bold
                 )
 
-                Text(lesson.second, color = Color.White)
-            }
-        }
-    }
-}
-
-/*
- * जरूरी: यह function private नहीं होना चाहिए।
- * RobotWorld.kt भी इसी CameraPanel() को इस्तेमाल करता है।
- */
-@Composable
-fun CameraPanel(
-    enabled: Boolean,
-    onEnabledChange: (Boolean) -> Unit,
-    onObservation: (String, Int) -> Unit
-) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-
-    var hasPermission by remember {
-        mutableStateOf(
-            ContextCompat.checkSelfPermission(
-                context,
-                android.Manifest.permission.CAMERA
-            ) == PackageManager.PERMISSION_GRANTED
-        )
-    }
-
-    var previewView by remember { mutableStateOf<PreviewView?>(null) }
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        hasPermission = granted
-        if (granted) onEnabledChange(true)
-    }
-
-    DisposableEffect(enabled, hasPermission, lifecycleOwner, previewView) {
-        var cameraProvider: ProcessCameraProvider? = null
-        var executor: java.util.concurrent.ExecutorService? = null
-        var faceDetector: FaceDetector? = null
-        var labeler: ImageLabeler? = null
-
-        if (enabled && hasPermission && previewView != null) {
-            val cameraFuture = ProcessCameraProvider.getInstance(context)
-
-            cameraFuture.addListener({
-                try {
-                    val view = previewView ?: return@addListener
-                    cameraProvider = cameraFuture.get()
-
-                    val preview = Preview.Builder()
-                        .build()
-                        .also { it.setSurfaceProvider(view.surfaceProvider) }
-
-                    val analysis = ImageAnalysis.Builder()
-                        .setBackpressureStrategy(
-                            ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST
-                        )
-                        .build()
-
-                    executor = Executors.newSingleThreadExecutor()
-
-                    val faceOptions = FaceDetectorOptions.Builder()
-                        .setPerformanceMode(
-                            FaceDetectorOptions.PERFORMANCE_MODE_FAST
-                        )
-                        .build()
-
-                    faceDetector = FaceDetection.getClient(faceOptions)
-                    labeler = ImageLabeling.getClient(
-                        ImageLabelerOptions.DEFAULT_OPTIONS
-                    )
-
-                    val detector = faceDetector!!
-                    val imageLabeler = labeler!!
-                    val analysisExecutor = executor!!
-
-                    analysis.setAnalyzer(analysisExecutor) { proxy ->
-                        analyzeCameraFrame(
-                            proxy,
-                            detector,
-                            imageLabeler
-                        ) { text, faceCount ->
-                            android.os.Handler(
-                                android.os.Looper.getMainLooper()
-                            ).post {
-                                onObservation(text, faceCount)
-                            }
-                        }
-                    }
-
-                    cameraProvider!!.unbindAll()
-                    cameraProvider!!.bindToLifecycle(
-                        lifecycleOwner,
-                        CameraSelector.DEFAULT_FRONT_CAMERA,
-                        preview,
-                        analysis
-                    )
-                } catch (error: Exception) {
-                    android.os.Handler(
-                        android.os.Looper.getMainLooper()
-                    ).post {
-                        onObservation(
-                            "Camera could not start: ${error.javaClass.simpleName}",
-                            0
-                        )
-                    }
-                }
-            }, ContextCompat.getMainExecutor(context))
-        }
-
-        onDispose {
-            try {
-                cameraProvider?.unbindAll()
-            } catch (_: Exception) {
-            }
-
-            try {
-                executor?.shutdown()
-            } catch (_: Exception) {
-            }
-
-            try {
-                faceDetector?.close()
-            } catch (_: Exception) {
-            }
-
-            try {
-                labeler?.close()
-            } catch (_: Exception) {
-            }
-        }
-    }
-
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        if (!hasPermission) {
-            Button(
-                onClick = {
-                    permissionLauncher.launch(
-                        android.Manifest.permission.CAMERA
-                    )
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Allow Camera Access")
-            }
-
-            Text(
-                "Live camera analysis के लिए camera permission जरूरी है।",
-                color = Muted,
-                style = MaterialTheme.typography.bodySmall
-            )
-        } else {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Button(
-                    onClick = { onEnabledChange(!enabled) },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(if (enabled) "Stop Camera" else "Start Camera")
-                }
-
-                if (enabled) {
+                if (memories.isEmpty()) {
                     Text(
-                        "LIVE",
-                        color = Red,
-                        fontWeight = FontWeight.Black
+                        "अभी कोई जानकारी सेव नहीं है।",
+                        color = RobotMuted
                     )
-                }
-            }
-
-            if (enabled) {
-                AndroidView(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(250.dp),
-                    factory = { viewContext ->
-                        PreviewView(viewContext).apply {
-                            scaleType = PreviewView.ScaleType.FILL_CENTER
-                            previewView = this
-                        }
-                    },
-                    update = { view ->
-                        if (previewView !== view) {
-                            previewView = view
-                        }
+                } else {
+                    memories.take(10).forEachIndexed { index, item ->
+                        Text(
+                            "${index + 1}. $item",
+                            color = Color.White
+                        )
                     }
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(90.dp)
-                        .background(Panel, RoundedCornerShape(14.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("Camera stopped", color = Muted)
+
+                    OutlinedButton(
+                        onClick = { memories.clear() },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Clear Memory List")
+                    }
                 }
             }
         }
-    }
-}
 
-private fun analyzeCameraFrame(
-    proxy: ImageProxy,
-    faceDetector: FaceDetector,
-    labeler: ImageLabeler,
-    onResult: (String, Int) -> Unit
-) {
-    val mediaImage = proxy.image
+        Spacer(Modifier.height(4.dp))
 
-    if (mediaImage == null) {
-        proxy.close()
-        return
-    }
-
-    val inputImage = InputImage.fromMediaImage(
-        mediaImage,
-        proxy.imageInfo.rotationDegrees
-    )
-
-    var faceDone = false
-    var labelsDone = false
-    var faceCount = 0
-    var labels = emptyList<String>()
-    var completed = false
-
-    fun finishIfReady() {
-        if (faceDone && labelsDone && !completed) {
-            completed = true
-
-            val scene = if (labels.isEmpty()) {
-                "No confident scene labels"
-            } else {
-                labels.joinToString(", ")
-            }
-
-            onResult(
-                "Faces detected: $faceCount • Scene labels: $scene",
-                faceCount
-            )
-
-            proxy.close()
-        }
-    }
-
-    faceDetector.process(inputImage)
-        .addOnSuccessListener { faces ->
-            faceCount = faces.size
-        }
-        .addOnFailureListener {
-            // Face analysis failed; scene analysis may still complete.
-        }
-        .addOnCompleteListener {
-            faceDone = true
-            finishIfReady()
-        }
-
-    labeler.process(inputImage)
-        .addOnSuccessListener { results ->
-            labels = results
-                .filter { it.confidence >= 0.55f }
-                .take(4)
-                .map { it.text }
-        }
-        .addOnFailureListener {
-            // Scene analysis failed; face analysis may still complete.
-        }
-        .addOnCompleteListener {
-            labelsDone = true
-            finishIfReady()
-        }
-}
-
-@Composable
-private fun StabilityRing(stability: Float) {
-    Canvas(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(220.dp)
-    ) {
-        val center = Offset(size.width / 2f, size.height / 2f)
-        val radius = size.minDimension * 0.32f
-
-        drawCircle(
-            color = Red.copy(alpha = 0.08f),
-            radius = radius * 1.3f,
-            center = center
+        Text(
+            text = "महत्वपूर्ण: यह Refresh Theory पर आधारित एक प्रयोगात्मक simulation है। Stability Score और memory list चेतना का वैज्ञानिक प्रमाण नहीं हैं। Memory list अभी ऐप बंद होने पर स्थायी रूप से सुरक्षित नहीं रहती।",
+            color = RobotMuted,
+            style = MaterialTheme.typography.bodySmall
         )
-
-        drawCircle(
-            color = Red.copy(alpha = 0.85f),
-            radius = radius,
-            center = center,
-            style = Stroke(width = 8.dp.toPx())
-        )
-
-        drawArc(
-            color = Cyan,
-            startAngle = -90f,
-            sweepAngle = 360f * stability.coerceIn(0f, 1f),
-            useCenter = false,
-            topLeft = Offset(
-                center.x - radius,
-                center.y - radius
-            ),
-            size = androidx.compose.ui.geometry.Size(
-                radius * 2f,
-                radius * 2f
-            ),
-            style = Stroke(width = 8.dp.toPx())
-        )
-
-        repeat(18) { index ->
-            val angle = index * 2.0 * PI / 18.0
-            val dotRadius = radius * (0.45f + (index % 4) * 0.1f)
-
-            val point = Offset(
-                center.x + cos(angle).toFloat() * dotRadius,
-                center.y + sin(angle).toFloat() * dotRadius
-            )
-
-            drawCircle(
-                color = if (index % 3 == 0) Cyan else Color.White,
-                radius = 3.dp.toPx(),
-                center = point
-            )
-        }
     }
 }
