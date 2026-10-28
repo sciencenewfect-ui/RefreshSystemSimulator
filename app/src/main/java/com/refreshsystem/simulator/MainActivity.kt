@@ -423,7 +423,12 @@ private fun analyzeCameraFrame(
         .addOnFailureListener { }
         .addOnCompleteListener { faceDone = true; finishIfReady() }
     labeler.process(input)
-        .addOnSuccessListener { results -> labels = results.filter { it.confidence >= .55f }.take(4).map { it.text } }
+        .addOnSuccessListener { results ->
+            labels = results
+                .filter { label: com.google.mlkit.vision.label.ImageLabel -> label.confidence >= 0.55f }
+                .take(4)
+                .map { label: com.google.mlkit.vision.label.ImageLabel -> label.text }
+        }
         .addOnFailureListener { }
         .addOnCompleteListener { labelsDone = true; finishIfReady() }
 }
