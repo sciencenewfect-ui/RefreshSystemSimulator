@@ -4,6 +4,22 @@ import android.content.Context
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.Preview
+import androidx.camera.core.ImageProxy
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.face.FaceDetection
+import com.google.mlkit.vision.face.FaceDetectorOptions
+import com.google.mlkit.vision.label.ImageLabeling
+import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
+import java.util.concurrent.Executors
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -76,6 +92,10 @@ private fun RefreshTheoryApp() {
     var internalState by remember { mutableFloatStateOf(.5f) }
     var stability by remember { mutableFloatStateOf(.72f) }
     var activeLesson by remember { mutableIntStateOf(0) }
+    var cameraObservation by remember { mutableStateOf("Camera is off. Start it to analyze live input.") }
+    var cameraFaceCount by remember { mutableIntStateOf(0) }
+    var cameraEnabled by remember { mutableStateOf(false) }
+    var lastCameraObservation by remember { mutableStateOf("") }
     val lessons = remember {
         listOf(
             "REFRESH PROCESS" to "A system updates over time. Its parts can change while its overall organization continues.",
@@ -99,6 +119,16 @@ private fun RefreshTheoryApp() {
         photoBitmap = null
         val uri = photoUri ?: return@LaunchedEffect
         try { context.contentResolver.openInputStream(uri)?.use { photoBitmap = BitmapFactory.decodeStream(it) } } catch (_: Exception) { }
+    }
+
+    LaunchedEffect(cameraObservation) {
+        if (cameraObservation != lastCameraObservation && cameraObservation.isNotBlank() && cameraEnabled) {
+            lastCameraObservation = cameraObservation
+            internalState = (internalState * .75f + .25f * (if (cameraFaceCount > 0) .8f else .4f)).coerceIn(0f, 1f)
+            stability = (stability * .8f + (if (cameraFaceCount > 0) .78f else .62f) * .2f).coerceIn(.05f, 1f)
+            events.add(0, "Camera refresh: $cameraObservation")
+            while (events.size > 40) events.removeAt(events.lastIndex)
+        }
     }
 
     LaunchedEffect(activeLesson) {
@@ -136,6 +166,19 @@ private fun RefreshTheoryApp() {
                         Text("Box 1 • Digital Robot", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(12.dp))
                         RobotFigure(photoBitmap = photoBitmap, stability = stability, tick = tick)
+                        HorizontalDivider(Modifier.padding(vertical = 12.dp), color = Color.DarkGray)
+                        Text("Live Camera • Face + Scene Input", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text("Camera observations feed the Refresh and Stability model. Frames are analyzed live and are not saved by this feature.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                        Spacer(Modifier.height(8.dp))
+                        CameraPanel(
+                            enabled = cameraEnabled,
+                            onEnabledChange = { cameraEnabled = it },
+                            onObservation = { text, faces ->
+                                cameraObservation = text
+                                cameraFaceCount = faces
+                            }
+                        )
+                        Text("Latest observation: $cameraObservation", color = Cyan, style = MaterialTheme.typography.bodyMedium)
                         Button(onClick = { photoPicker.launch(arrayOf("image/*")) }) { Text("Customize Robot Face") }
                         OutlinedTextField(value = name, onValueChange = { name = it; prefs.edit().putString("user_name", it).apply() }, label = { Text("Your name (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                         Spacer(Modifier.height(8.dp))
@@ -263,6 +306,126 @@ private fun RobotFigure(photoBitmap: android.graphics.Bitmap?, stability: Float,
             )
         }
     }
+}
+
+@Composable
+private fun CameraPanel(
+    enabled: Boolean,
+    onEnabledChange: (Boolean) -> Unit,
+    onObservation: (String, Int) -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var hasPermission by remember {
+        mutableStateOf(ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
+    }
+    var previewView by remember { mutableStateOf<PreviewView?>(null) }
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        hasPermission = granted
+        if (granted) onEnabledChange(true)
+    }
+
+    DisposableEffect(enabled, hasPermission, lifecycleOwner, previewView) {
+        var provider: ProcessCameraProvider? = null
+        var executor: java.util.concurrent.ExecutorService? = null
+        var faceDetector: com.google.mlkit.vision.face.FaceDetector? = null
+        var labeler: com.google.mlkit.vision.label.ImageLabeler? = null
+        if (enabled && hasPermission && previewView != null) {
+            val future = ProcessCameraProvider.getInstance(context)
+            future.addListener({
+                try {
+                    provider = future.get()
+                    val preview = Preview.Builder().build().also { it.setSurfaceProvider(previewView!!.surfaceProvider) }
+                    val analysis = ImageAnalysis.Builder()
+                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                        .build()
+                    executor = Executors.newSingleThreadExecutor()
+                    val faceOptions = FaceDetectorOptions.Builder()
+                        .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
+                        .build()
+                    faceDetector = FaceDetection.getClient(faceOptions)
+                    labeler = ImageLabeling.getClient(ImageLabelerOptions.DEFAULT_OPTIONS)
+                    analysis.setAnalyzer(executor!!) { proxy ->
+                        analyzeCameraFrame(proxy, faceDetector!!, labeler!!) { text, count ->
+                            android.os.Handler(android.os.Looper.getMainLooper()).post { onObservation(text, count) }
+                        }
+                    }
+                    provider!!.unbindAll()
+                    provider!!.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_FRONT_CAMERA, preview, analysis)
+                } catch (e: Exception) {
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        onObservation("Camera could not start: ${e.javaClass.simpleName}", 0)
+                    }
+                }
+            }, ContextCompat.getMainExecutor(context))
+        }
+        onDispose {
+            try { provider?.unbindAll() } catch (_: Exception) { }
+            try { executor?.shutdown() } catch (_: Exception) { }
+            try { faceDetector?.close() } catch (_: Exception) { }
+            try { labeler?.close() } catch (_: Exception) { }
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (!hasPermission) {
+            Button(onClick = { permissionLauncher.launch(android.Manifest.permission.CAMERA) }, modifier = Modifier.fillMaxWidth()) {
+                Text("Allow Camera Access")
+            }
+            Text("Camera permission is required for live face and scene analysis.", color = Muted, style = MaterialTheme.typography.bodySmall)
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                Button(onClick = { onEnabledChange(!enabled) }, modifier = Modifier.weight(1f)) {
+                    Text(if (enabled) "Stop Camera" else "Start Camera")
+                }
+                if (enabled) Text("LIVE", color = Red, fontWeight = FontWeight.Black, modifier = Modifier.align(Alignment.CenterVertically))
+            }
+            if (enabled) {
+                AndroidView(
+                    modifier = Modifier.fillMaxWidth().height(250.dp).clip(RoundedCornerShape(16.dp)),
+                    factory = { viewContext ->
+                        PreviewView(viewContext).apply { scaleType = PreviewView.ScaleType.FILL_CENTER }.also { previewView = it }
+                    }
+                )
+            } else {
+                Box(Modifier.fillMaxWidth().height(100.dp).background(Panel, RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) {
+                    Text("Camera stopped", color = Muted)
+                }
+            }
+        }
+    }
+}
+
+private fun analyzeCameraFrame(
+    proxy: ImageProxy,
+    faceDetector: com.google.mlkit.vision.face.FaceDetector,
+    labeler: com.google.mlkit.vision.label.ImageLabeler,
+    onResult: (String, Int) -> Unit
+) {
+    val mediaImage = proxy.image
+    if (mediaImage == null) { proxy.close(); return }
+    val input = InputImage.fromMediaImage(mediaImage, proxy.imageInfo.rotationDegrees)
+    var faceDone = false
+    var labelsDone = false
+    var faceCount = 0
+    var labels = emptyList<String>()
+    var finished = false
+    fun finishIfReady() {
+        if (faceDone && labelsDone && !finished) {
+            finished = true
+            val scene = if (labels.isEmpty()) "scene not confidently labeled" else labels.joinToString(", ")
+            onResult("Faces detected: $faceCount • Scene labels: $scene", faceCount)
+            proxy.close()
+        }
+    }
+    faceDetector.process(input)
+        .addOnSuccessListener { faces -> faceCount = faces.size }
+        .addOnFailureListener { }
+        .addOnCompleteListener { faceDone = true; finishIfReady() }
+    labeler.process(input)
+        .addOnSuccessListener { results -> labels = results.filter { it.confidence >= .55f }.take(4).map { it.text } }
+        .addOnFailureListener { }
+        .addOnCompleteListener { labelsDone = true; finishIfReady() }
 }
 
 @Composable
