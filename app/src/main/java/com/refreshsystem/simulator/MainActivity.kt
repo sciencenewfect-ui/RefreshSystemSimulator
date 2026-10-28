@@ -424,10 +424,13 @@ private fun analyzeCameraFrame(
         .addOnCompleteListener { faceDone = true; finishIfReady() }
     labeler.process(input)
         .addOnSuccessListener { results ->
-            labels = results
-                .filter { label: com.google.mlkit.vision.label.ImageLabel -> label.confidence >= 0.55f }
-                .take(4)
-                .map { label: com.google.mlkit.vision.label.ImageLabel -> label.text }
+            val acceptedLabels = mutableListOf<String>()
+            for (label in results) {
+                if (label.getConfidence() >= 0.55f && acceptedLabels.size < 4) {
+                    acceptedLabels.add(label.getText())
+                }
+            }
+            labels = acceptedLabels
         }
         .addOnFailureListener { }
         .addOnCompleteListener { labelsDone = true; finishIfReady() }
