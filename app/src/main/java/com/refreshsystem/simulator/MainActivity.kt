@@ -35,7 +35,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -87,13 +86,19 @@ private fun RefreshTheoryApp() {
     }
 
     var tab by remember { mutableIntStateOf(0) }
+
     var photoUri by remember {
         mutableStateOf(prefs.getString("photo_uri", null)?.let(Uri::parse))
     }
-    var photoBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+
+    var photoBitmap by remember {
+        mutableStateOf<android.graphics.Bitmap?>(null)
+    }
+
     var name by remember {
         mutableStateOf(prefs.getString("user_name", "") ?: "")
     }
+
     var memoryInput by remember { mutableStateOf("") }
 
     val memories = remember {
@@ -107,15 +112,18 @@ private fun RefreshTheoryApp() {
     }
 
     val events = remember { mutableStateListOf<String>() }
+
     var tick by remember { mutableIntStateOf(0) }
     var running by remember { mutableStateOf(true) }
     var environment by remember { mutableFloatStateOf(.5f) }
     var internalState by remember { mutableFloatStateOf(.5f) }
     var stability by remember { mutableFloatStateOf(.72f) }
     var activeLesson by remember { mutableIntStateOf(0) }
+
     var cameraObservation by remember {
         mutableStateOf("Camera is off. Start it to analyze live input.")
     }
+
     var cameraFaceCount by remember { mutableIntStateOf(0) }
     var cameraEnabled by remember { mutableStateOf(false) }
     var lastCameraObservation by remember { mutableStateOf("") }
@@ -124,14 +132,19 @@ private fun RefreshTheoryApp() {
         listOf(
             "REFRESH PROCESS" to
                 "A system updates over time. Its parts can change while its overall organization continues.",
+
             "OPEN SYSTEM" to
                 "An open system exchanges energy, matter, or signals with its environment.",
+
             "STABILITY" to
                 "In this model, stability describes how much organization and function remain during change.",
+
             "INFORMATION RETENTION" to
                 "Recorded information can be retrieved later and may influence current decisions.",
+
             "IDENTITY & MEMORY" to
                 "Memory can influence behavior; this alone does not prove subjective experience.",
+
             "RESEARCH QUESTION" to
                 "Could stability and information retention help explain consciousness? This hypothesis needs testable experiments."
         )
@@ -215,6 +228,7 @@ private fun RefreshTheoryApp() {
             while (events.size > 40) events.removeAt(events.lastIndex)
 
             val connectivity = .58f + Random.nextFloat() * .25f
+
             stability = (
                 connectivity * .55f +
                     (1f - kotlin.math.abs(internalState - .5f)) * .45f
@@ -236,15 +250,19 @@ private fun RefreshTheoryApp() {
             color = Color.White
         )
 
-        Text("A changing open system • experimental model", color = Muted)
+        Text(
+            "A changing open system • experimental model",
+            color = Muted
+        )
+
         Spacer(Modifier.height(14.dp))
 
+        // Only three tabs: Robot, Experiment and Learn.
         Row(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            // World tab added; existing tabs retained.
-            listOf("Robot", "Experiment", "Learn", "World")
+            listOf("Robot", "Experiment", "Learn")
                 .forEachIndexed { i, label ->
                     FilterChip(
                         selected = tab == i,
@@ -257,13 +275,25 @@ private fun RefreshTheoryApp() {
         Spacer(Modifier.height(14.dp))
 
         when (tab) {
+            // -----------------------------------------------------
+            // ROBOT TAB
+            // RobotWorldScreen is shown at the top of this tab.
+            // -----------------------------------------------------
             0 -> {
+                RobotWorldScreen()
+
+                Spacer(Modifier.height(14.dp))
+
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = Panel),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Panel
+                    ),
                     shape = RoundedCornerShape(24.dp)
                 ) {
                     Column(
-                        Modifier.fillMaxWidth().padding(16.dp),
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
@@ -273,6 +303,7 @@ private fun RefreshTheoryApp() {
                         )
 
                         Spacer(Modifier.height(12.dp))
+
                         RobotFigure(photoBitmap, stability, tick)
 
                         HorizontalDivider(
@@ -310,7 +341,9 @@ private fun RefreshTheoryApp() {
                         )
 
                         Button(
-                            onClick = { photoPicker.launch(arrayOf("image/*")) }
+                            onClick = {
+                                photoPicker.launch(arrayOf("image/*"))
+                            }
                         ) {
                             Text("Customize Robot Face")
                         }
@@ -319,7 +352,9 @@ private fun RefreshTheoryApp() {
                             value = name,
                             onValueChange = {
                                 name = it
-                                prefs.edit().putString("user_name", it).apply()
+                                prefs.edit()
+                                    .putString("user_name", it)
+                                    .apply()
                             },
                             label = { Text("Your name (optional)") },
                             singleLine = true,
@@ -368,6 +403,7 @@ private fun RefreshTheoryApp() {
                                         0,
                                         "Memory recorded: ${memoryInput.trim().take(45)}"
                                     )
+
                                     memoryInput = ""
                                 }
                             },
@@ -397,6 +433,7 @@ private fun RefreshTheoryApp() {
                         Button(
                             onClick = {
                                 val chosen = memories.firstOrNull()
+
                                 events.add(
                                     0,
                                     if (chosen != null) {
@@ -414,19 +451,32 @@ private fun RefreshTheoryApp() {
                 }
             }
 
+            // -----------------------------------------------------
+            // EXPERIMENT TAB
+            // -----------------------------------------------------
             1 -> {
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = Panel),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Panel
+                    ),
                     shape = RoundedCornerShape(24.dp)
                 ) {
-                    Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                    ) {
                         Text(
                             "Box 2 • Natural Open System",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold
                         )
 
-                        Text("Refresh $tick • Connections keep changing", color = Muted)
+                        Text(
+                            "Refresh $tick • Connections keep changing",
+                            color = Muted
+                        )
+
                         Spacer(Modifier.height(8.dp))
 
                         StabilityRing(stability)
@@ -442,7 +492,10 @@ private fun RefreshTheoryApp() {
                             color = Red
                         )
 
-                        Text("Internal state: ${(internalState * 100).toInt()}%")
+                        Text(
+                            "Internal state: ${(internalState * 100).toInt()}%"
+                        )
+
                         Text("External environment")
 
                         Slider(
@@ -451,8 +504,12 @@ private fun RefreshTheoryApp() {
                             valueRange = 0f..1f
                         )
 
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(onClick = { running = !running }) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = { running = !running }
+                            ) {
                                 Text(if (running) "Pause" else "Resume")
                             }
 
@@ -478,6 +535,7 @@ private fun RefreshTheoryApp() {
                 }
 
                 Spacer(Modifier.height(12.dp))
+
                 Text(
                     "Recent Changes",
                     style = MaterialTheme.typography.titleMedium,
@@ -485,23 +543,40 @@ private fun RefreshTheoryApp() {
                 )
 
                 events.take(15).forEach {
-                    Text("• $it", color = Muted, modifier = Modifier.padding(vertical = 3.dp))
+                    Text(
+                        "• $it",
+                        color = Muted,
+                        modifier = Modifier.padding(vertical = 3.dp)
+                    )
                 }
             }
 
+            // -----------------------------------------------------
+            // LEARN TAB
+            // -----------------------------------------------------
             2 -> {
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = Panel),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Panel
+                    ),
                     shape = RoundedCornerShape(24.dp)
                 ) {
-                    Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                    ) {
                         Text(
                             "Box 3 • Learn Refresh Theory",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold
                         )
 
-                        Text("Educational slides advance automatically", color = Muted)
+                        Text(
+                            "Educational slides advance automatically",
+                            color = Muted
+                        )
+
                         Spacer(Modifier.height(14.dp))
 
                         Card(
@@ -510,7 +585,11 @@ private fun RefreshTheoryApp() {
                             ),
                             shape = RoundedCornerShape(18.dp)
                         ) {
-                            Column(Modifier.fillMaxWidth().padding(18.dp)) {
+                            Column(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(18.dp)
+                            ) {
                                 Text(
                                     lessons[activeLesson].first,
                                     color = Red,
@@ -526,7 +605,9 @@ private fun RefreshTheoryApp() {
 
                                 Spacer(Modifier.height(18.dp))
 
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
                                     Text(
                                         "${activeLesson + 1} / ${lessons.size}",
                                         color = Muted
@@ -554,11 +635,6 @@ private fun RefreshTheoryApp() {
                         )
                     }
                 }
-            }
-
-            // New World screen, using your existing RobotWorld.kt file.
-            3 -> {
-                RobotWorldScreen()
             }
         }
 
@@ -591,7 +667,9 @@ private fun RobotFigure(
     )
 
     Box(
-        Modifier.fillMaxWidth().height(330.dp),
+        Modifier
+            .fillMaxWidth()
+            .height(330.dp),
         contentAlignment = Alignment.Center
     ) {
         Canvas(Modifier.fillMaxSize()) {
@@ -611,49 +689,81 @@ private fun RobotFigure(
                 Red.copy(alpha = .24f),
                 100f * unit * pulse,
                 pt(0f, 112f),
-                style = androidx.compose.ui.graphics.drawscope.Stroke(2.5f * unit)
+                style = androidx.compose.ui.graphics.drawscope.Stroke(
+                    2.5f * unit
+                )
             )
 
             drawRoundRect(
                 Color(0xFF718197),
                 topLeft = pt(-19f, 153f),
-                size = androidx.compose.ui.geometry.Size(38f * unit, 30f * unit),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(8f * unit)
+                size = androidx.compose.ui.geometry.Size(
+                    38f * unit,
+                    30f * unit
+                ),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(
+                    8f * unit
+                )
             )
 
             drawRoundRect(
                 Color(0xFF536176),
                 topLeft = pt(-70f, 176f),
-                size = androidx.compose.ui.geometry.Size(140f * unit, 108f * unit),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(28f * unit)
+                size = androidx.compose.ui.geometry.Size(
+                    140f * unit,
+                    108f * unit
+                ),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(
+                    28f * unit
+                )
             )
 
             drawRoundRect(
                 Color(0xFF9AA8BA),
                 topLeft = pt(-48f, 188f),
-                size = androidx.compose.ui.geometry.Size(96f * unit, 78f * unit),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(18f * unit)
+                size = androidx.compose.ui.geometry.Size(
+                    96f * unit,
+                    78f * unit
+                ),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(
+                    18f * unit
+                )
             )
 
             drawRoundRect(
                 Red.copy(alpha = .8f),
                 topLeft = pt(-28f, 204f),
-                size = androidx.compose.ui.geometry.Size(56f * unit, 5f * unit),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(3f * unit)
+                size = androidx.compose.ui.geometry.Size(
+                    56f * unit,
+                    5f * unit
+                ),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(
+                    3f * unit
+                )
             )
 
             drawRoundRect(
                 Color(0xFF718197),
                 topLeft = pt(-96f, 184f),
-                size = androidx.compose.ui.geometry.Size(23f * unit, 83f * unit),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(11f * unit)
+                size = androidx.compose.ui.geometry.Size(
+                    23f * unit,
+                    83f * unit
+                ),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(
+                    11f * unit
+                )
             )
 
             drawRoundRect(
                 Color(0xFF718197),
                 topLeft = pt(73f, 184f),
-                size = androidx.compose.ui.geometry.Size(23f * unit, 83f * unit),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(11f * unit)
+                size = androidx.compose.ui.geometry.Size(
+                    23f * unit,
+                    83f * unit
+                ),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(
+                    11f * unit
+                )
             )
 
             drawCircle(Cyan, 7f * unit, pt(-84f, 271f))
@@ -662,29 +772,49 @@ private fun RobotFigure(
             drawRoundRect(
                 Color(0xFF9AA8BA),
                 topLeft = pt(-57f, 42f),
-                size = androidx.compose.ui.geometry.Size(114f * unit, 112f * unit),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(28f * unit)
+                size = androidx.compose.ui.geometry.Size(
+                    114f * unit,
+                    112f * unit
+                ),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(
+                    28f * unit
+                )
             )
 
             drawRoundRect(
                 Color(0xFF283346),
                 topLeft = pt(-48f, 51f),
-                size = androidx.compose.ui.geometry.Size(96f * unit, 94f * unit),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(23f * unit)
+                size = androidx.compose.ui.geometry.Size(
+                    96f * unit,
+                    94f * unit
+                ),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(
+                    23f * unit
+                )
             )
 
             drawRoundRect(
                 Red.copy(alpha = .9f),
                 topLeft = pt(-32f, 83f),
-                size = androidx.compose.ui.geometry.Size(18f * unit, 6f * unit),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(3f * unit)
+                size = androidx.compose.ui.geometry.Size(
+                    18f * unit,
+                    6f * unit
+                ),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(
+                    3f * unit
+                )
             )
 
             drawRoundRect(
                 Red.copy(alpha = .9f),
                 topLeft = pt(14f, 83f),
-                size = androidx.compose.ui.geometry.Size(18f * unit, 6f * unit),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(3f * unit)
+                size = androidx.compose.ui.geometry.Size(
+                    18f * unit,
+                    6f * unit
+                ),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(
+                    3f * unit
+                )
             )
 
             drawLine(
@@ -695,7 +825,9 @@ private fun RobotFigure(
             )
 
             repeat(12) { i ->
-                val a = (i * 2.0 * PI / 12.0) + (tick % 10) * .10
+                val a =
+                    (i * 2.0 * PI / 12.0) + (tick % 10) * .10
+
                 val x = cos(a).toFloat() * 105f * unit
                 val y = 112f * unit + sin(a).toFloat() * 90f * unit
                 val end = Offset(cx + x, y)
@@ -787,6 +919,7 @@ private fun CameraPanel(
                         .build()
 
                     faceDetector = FaceDetection.getClient(faceOptions)
+
                     labeler = ImageLabeling.getClient(
                         ImageLabelerOptions.DEFAULT_OPTIONS
                     )
@@ -827,10 +960,25 @@ private fun CameraPanel(
         }
 
         onDispose {
-            try { provider?.unbindAll() } catch (_: Exception) {}
-            try { executor?.shutdown() } catch (_: Exception) {}
-            try { faceDetector?.close() } catch (_: Exception) {}
-            try { labeler?.close() } catch (_: Exception) {}
+            try {
+                provider?.unbindAll()
+            } catch (_: Exception) {
+            }
+
+            try {
+                executor?.shutdown()
+            } catch (_: Exception) {
+            }
+
+            try {
+                faceDetector?.close()
+            } catch (_: Exception) {
+            }
+
+            try {
+                labeler?.close()
+            } catch (_: Exception) {
+            }
         }
     }
 
@@ -838,7 +986,9 @@ private fun CameraPanel(
         if (!hasPermission) {
             Button(
                 onClick = {
-                    permissionLauncher.launch(android.Manifest.permission.CAMERA)
+                    permissionLauncher.launch(
+                        android.Manifest.permission.CAMERA
+                    )
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -891,7 +1041,10 @@ private fun CameraPanel(
                     Modifier
                         .fillMaxWidth()
                         .height(100.dp)
-                        .background(Panel, RoundedCornerShape(16.dp)),
+                        .background(
+                            Panel,
+                            RoundedCornerShape(16.dp)
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     Text("Camera stopped", color = Muted)
