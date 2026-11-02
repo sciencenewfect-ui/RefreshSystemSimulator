@@ -2,10 +2,6 @@
 package com.refreshsystem.simulator
 
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -345,13 +341,7 @@ private fun ResearchQuestionTicker(
     LaunchedEffect(Unit) {
         while (true) {
             delay(900)
-            listState.animateScrollToItem(
-                index = 3,
-                animationSpec = tween(
-                    durationMillis = 18000,
-                    easing = LinearEasing
-                )
-            )
+            listState.animateScrollToItem(index = 3)
             listState.scrollToItem(0)
         }
     }
