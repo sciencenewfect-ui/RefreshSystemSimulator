@@ -99,7 +99,7 @@ private fun RefreshTheoryApp() {
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            listOf("Robot", "Experiment", "Learn")
+            listOf("Robot", "Experiment", "Learn", "Research Lab")
                 .forEachIndexed { index, title ->
                     FilterChip(
                         selected = selectedTab == index,
@@ -116,6 +116,7 @@ private fun RefreshTheoryApp() {
             0 -> RobotWorldScreen()
             1 -> ExperimentScreen()
             2 -> LearnScreen()
+            3 -> ResearchLabScreen()
         }
 
         Spacer(Modifier.height(18.dp))
