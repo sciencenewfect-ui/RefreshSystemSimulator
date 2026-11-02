@@ -1,0 +1,243 @@
+package com.refreshsystem.simulator
+
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+
+private data class ResearchDepartment(
+val number: String,
+val title: String,
+val subtitle: String,
+val purpose: String
+)
+
+private val researchDepartments = listOf(
+ResearchDepartment(
+"01",
+"Current Understanding",
+"वर्तमान धारणा",
+"शरीर, स्मृति, पहचान और 'मैं' की मौजूदा वैज्ञानिक समझ को दर्ज करना।"
+),
+ResearchDepartment(
+"02",
+"Open System & Stability",
+"मूल वैज्ञानिक अध्ययन",
+"Open System, बाहरी आदान-प्रदान, Refresh Process और Stability का अध्ययन।"
+),
+ResearchDepartment(
+"03",
+"Memory & Consciousness",
+"स्मृति और चेतना",
+"Memory Formation, Retention, Refresh, I-Feeling और निरंतरता की जाँच।"
+),
+ResearchDepartment(
+"04",
+"Theory Evaluation",
+"धारणा का पुनर्मूल्यांकन",
+"शोध और प्रयोगों के परिणामों से सिद्धांत के दावों का मूल्यांकन।"
+),
+ResearchDepartment(
+"05",
+"Robot System Experiment",
+"रोबोट सिस्टम प्रयोग",
+"अंतिम चरण में साझा सिस्टम, अलगाव और Refresh/Stability के मॉडल का परीक्षण।"
+)
+)
+
+@Composable
+fun ResearchLabScreen() {
+val selectedDepartment =
+remember { mutableStateOf<ResearchDepartment?>(null) }
+
+if (selectedDepartment.value != null) {  
+    val department = selectedDepartment.value!!  
+
+    Column(  
+        modifier = Modifier  
+            .fillMaxSize()  
+            .padding(16.dp)  
+    ) {  
+        Text(  
+            text = "‹ वापस Research Lab",  
+            color = MaterialTheme.colorScheme.primary,  
+            style = MaterialTheme.typography.titleMedium,  
+            modifier = Modifier.clickable {  
+                selectedDepartment.value = null  
+            }  
+        )  
+
+        Spacer(modifier = Modifier.height(20.dp))  
+
+        Text(  
+            department.title,  
+            style = MaterialTheme.typography.headlineSmall  
+        )  
+
+        Text(  
+            department.subtitle,  
+            style = MaterialTheme.typography.titleMedium,  
+            color = MaterialTheme.colorScheme.primary  
+        )  
+
+        Spacer(modifier = Modifier.height(16.dp))  
+
+        Text(  
+            department.purpose,  
+            style = MaterialTheme.typography.bodyLarge  
+        )  
+
+        Spacer(modifier = Modifier.height(20.dp))  
+
+        Text(  
+            "इस विभाग की विस्तृत रिसर्च गतिविधियाँ अगले चरण में जोड़ी जाएँगी।",  
+            style = MaterialTheme.typography.bodyMedium  
+        )  
+
+        Spacer(modifier = Modifier.height(12.dp))  
+
+        Text(  
+            "ध्यान दें: Refresh Theory के विचार अभी शोध-परिकल्पनाएँ हैं। ऐप में दर्ज परिणामों को वैज्ञानिक प्रमाण से अलग रखा जाएगा।",  
+            style = MaterialTheme.typography.bodySmall,  
+            color = MaterialTheme.colorScheme.secondary  
+        )  
+    }  
+
+    return  
+}  
+
+LazyColumn(  
+    modifier = Modifier  
+        .fillMaxSize()  
+        .padding(16.dp),  
+    verticalArrangement = Arrangement.spacedBy(12.dp)  
+) {  
+    item {  
+        Text(  
+            "RESEARCH LAB",  
+            style = MaterialTheme.typography.labelLarge,  
+            color = MaterialTheme.colorScheme.primary  
+        )  
+
+        Spacer(modifier = Modifier.height(6.dp))  
+
+        Text(  
+            "Refresh Theory Research",  
+            style = MaterialTheme.typography.headlineSmall  
+        )  
+
+        Text(  
+            "शोध को पाँच अलग-अलग विभागों में व्यवस्थित करें। हर विभाग का काम और रिकॉर्ड अलग रहेगा।",  
+            style = MaterialTheme.typography.bodyMedium  
+        )  
+
+        Spacer(modifier = Modifier.height(8.dp))  
+
+        Card(  
+            colors = CardDefaults.cardColors(  
+                containerColor =  
+                    MaterialTheme.colorScheme.secondaryContainer  
+            ),  
+            modifier = Modifier.fillMaxWidth()  
+        ) {  
+            Column(Modifier.padding(14.dp)) {  
+                Text(  
+                    "Research Principle",  
+                    style = MaterialTheme.typography.titleMedium  
+                )  
+
+                Text(  
+                    "पहले अध्ययन और प्रयोग, फिर परिणामों के आधार पर सिद्धांत का मूल्यांकन। किसी परिकल्पना को पहले से सिद्ध नहीं माना जाएगा।",  
+                    style = MaterialTheme.typography.bodyMedium  
+                )  
+            }  
+        }  
+
+        Spacer(modifier = Modifier.height(8.dp))  
+    }  
+
+    items(researchDepartments) { department ->  
+        Card(  
+            modifier = Modifier  
+                .fillMaxWidth()  
+                .clickable {  
+                    selectedDepartment.value = department  
+                },  
+            border = BorderStroke(  
+                1.dp,  
+                MaterialTheme.colorScheme.outlineVariant  
+            ),  
+            colors = CardDefaults.cardColors(  
+                containerColor = MaterialTheme.colorScheme.surface  
+            )  
+        ) {  
+            Row(  
+                modifier = Modifier.padding(16.dp),  
+                horizontalArrangement = Arrangement.spacedBy(12.dp)  
+            ) {  
+                Text(  
+                    department.number,  
+                    color = MaterialTheme.colorScheme.primary,  
+                    style = MaterialTheme.typography.titleLarge  
+                )  
+
+                Column(modifier = Modifier.weight(1f)) {  
+                    Text(  
+                        department.title,  
+                        style = MaterialTheme.typography.titleMedium  
+                    )  
+
+                    Text(  
+                        department.subtitle,  
+                        color = MaterialTheme.colorScheme.primary,  
+                        style = MaterialTheme.typography.bodyMedium  
+                    )  
+
+                    Spacer(modifier = Modifier.height(6.dp))  
+
+                    Text(  
+                        department.purpose,  
+                        style = MaterialTheme.typography.bodySmall  
+                    )  
+
+                    Spacer(modifier = Modifier.height(6.dp))  
+
+                    Text(  
+                        "विभाग खोलें  →",  
+                        color = MaterialTheme.colorScheme.primary,  
+                        style = MaterialTheme.typography.labelLarge  
+                    )  
+                }  
+            }  
+        }  
+    }  
+
+    item {  
+        Spacer(modifier = Modifier.height(8.dp))  
+
+        Text(  
+            "नोट: अभी यह Research Lab की मुख्य स्क्रीन और विभागों का ढाँचा है। प्रयोगों के वास्तविक फॉर्म, डेटा रिकॉर्ड और ग्राफ अलग-अलग चरणों में जोड़े जाएँगे।",  
+            style = MaterialTheme.typography.bodySmall,  
+            color = MaterialTheme.colorScheme.secondary  
+        )  
+    }  
+}
+
+}
