@@ -25,7 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-private data class ResearchDepartment(
+data class ResearchDepartment(
     val title: String,
     val subtitle: String,
     val description: String,
