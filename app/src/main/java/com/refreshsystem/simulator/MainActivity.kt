@@ -68,68 +68,20 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/*
+ * नया मुख्य Research Lab Home Screen.
+ * पाँचों departments ResearchLabScreen.kt से खुलेंगे।
+ * पुराने Robot, Experiment और Learn tabs अब मुख्य स्क्रीन पर नहीं दिखेंगे।
+ */
 @Composable
 private fun RefreshTheoryApp() {
-    var selectedTab by remember { mutableIntStateOf(0) }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Ink)
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp)
-    ) {
-        Text(
-            text = "REFRESH THEORY",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Black,
-            color = Color.White
-        )
-
-        Spacer(Modifier.height(4.dp))
-
-        Text(
-            text = "Open System • Refresh • Stability • Information",
-            color = Muted
-        )
-
-        Spacer(Modifier.height(16.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            listOf("Robot", "Experiment", "Learn", "Research Lab")
-                .forEachIndexed { index, title ->
-                    FilterChip(
-                        selected = selectedTab == index,
-                        onClick = { selectedTab = index },
-                        label = { Text(title) },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        when (selectedTab) {
-            0 -> RobotWorldScreen()
-            1 -> ExperimentScreen()
-            2 -> LearnScreen()
-            3 -> ResearchLabScreen()
-        }
-
-        Spacer(Modifier.height(18.dp))
-
-        Text(
-            text = "Research hypothesis: “Consciousness is the Stability of an Open System.” " +
-                "यह ऐप व्यवहार, जानकारी और बदलाव का simulation है; यह चेतना का वैज्ञानिक प्रमाण नहीं है।",
-            color = Muted,
-            style = MaterialTheme.typography.bodySmall
-        )
-    }
+    ResearchHomeScreen()
 }
 
+/*
+ * पुराना ExperimentScreen सुरक्षित रखा गया है।
+ * इसे मुख्य navigation से हटाया गया है, code delete नहीं किया गया।
+ */
 @Composable
 private fun ExperimentScreen() {
     var refreshCount by remember { mutableIntStateOf(0) }
@@ -148,12 +100,12 @@ private fun ExperimentScreen() {
                 internalState * 0.65f +
                     environment * 0.25f +
                     kotlin.random.Random.nextFloat() * 0.10f
-            ).coerceIn(0f, 1f)
+                ).coerceIn(0f, 1f)
 
             stability = (
                 0.60f +
                     (1f - kotlin.math.abs(internalState - environment)) * 0.40f
-            ).coerceIn(0f, 1f)
+                ).coerceIn(0f, 1f)
         }
     }
 
@@ -183,6 +135,7 @@ private fun ExperimentScreen() {
 
             Text("Refresh Count: $refreshCount")
             Text("Stability: ${(stability * 100).toInt()}%")
+
             LinearProgressIndicator(
                 progress = { stability },
                 modifier = Modifier.fillMaxWidth(),
@@ -191,6 +144,7 @@ private fun ExperimentScreen() {
 
             Text("Internal State: ${(internalState * 100).toInt()}%")
             Text("External Environment")
+
             Slider(
                 value = environment,
                 onValueChange = { environment = it },
@@ -208,13 +162,14 @@ private fun ExperimentScreen() {
                 OutlinedButton(
                     onClick = {
                         refreshCount++
+
                         internalState = (
                             internalState + environment
-                        ).div(2f).coerceIn(0f, 1f)
+                            ).div(2f).coerceIn(0f, 1f)
 
                         stability = (
                             1f - kotlin.math.abs(internalState - environment) * 0.4f
-                        ).coerceIn(0f, 1f)
+                            ).coerceIn(0f, 1f)
                     },
                     modifier = Modifier.weight(1f)
                 ) {
@@ -231,6 +186,10 @@ private fun ExperimentScreen() {
     }
 }
 
+/*
+ * पुराना LearnScreen सुरक्षित रखा गया है।
+ * अब यह मुख्य navigation में नहीं दिखेगा।
+ */
 @Composable
 private fun LearnScreen() {
     val lessons = listOf(
@@ -355,6 +314,7 @@ fun CameraPanel(
                         .build()
 
                     faceDetector = FaceDetection.getClient(faceOptions)
+
                     labeler = ImageLabeling.getClient(
                         ImageLabelerOptions.DEFAULT_OPTIONS
                     )
