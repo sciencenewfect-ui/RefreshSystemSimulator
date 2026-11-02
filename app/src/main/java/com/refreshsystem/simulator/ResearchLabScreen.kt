@@ -11,7 +11,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -20,10 +22,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 
 data class ResearchTopic(
     val english: String,
@@ -38,11 +40,19 @@ data class ResearchDepartment(
     val status: String
 )
 
+data class ResearchQuestion(
+    val title: String,
+    val hindiTitle: String,
+    val englishAnswer: String,
+    val hindiAnswer: String,
+    val colors: List<Color>
+)
+
 private val researchDepartments = listOf(
     ResearchDepartment(
         "Current Understanding",
         "वर्तमान वैज्ञानिक समझ",
-        "शरीर, मस्तिष्क, याददाश्त और चेतना के बारे में उपलब्ध वैज्ञानिक जानकारी का अध्ययन।",
+        "Study of established scientific knowledge about the body, brain, memory and consciousness.",
         listOf(
             ResearchTopic("Brain and Body", "मस्तिष्क और शरीर"),
             ResearchTopic("Memory and Identity", "याददाश्त और पहचान"),
@@ -54,7 +64,7 @@ private val researchDepartments = listOf(
     ResearchDepartment(
         "Open System & Stability Research",
         "ओपन सिस्टम और स्थिरता का शोध",
-        "Open System, Refresh Process, Movement और Dynamic Stability के संबंधों का अध्ययन।",
+        "Study of Open Systems, Refresh Process, change and Dynamic Stability.",
         listOf(
             ResearchTopic("Open System", "खुली प्रणाली"),
             ResearchTopic("Refresh Process", "लगातार अपडेट होने की प्रक्रिया"),
@@ -66,7 +76,7 @@ private val researchDepartments = listOf(
     ResearchDepartment(
         "Memory & Consciousness Research",
         "याददाश्त और चेतना का अध्ययन",
-        "Memory, I-Feeling, Identity और सिस्टम की निरंतरता के बीच संभावित संबंधों की जाँच।",
+        "Explore possible relationships between memory, I-Feeling, identity and continuity.",
         listOf(
             ResearchTopic("Memory Formation", "याददाश्त बनने की प्रक्रिया"),
             ResearchTopic("Memory Refresh", "याददाश्त का लगातार अपडेट होना"),
@@ -78,7 +88,7 @@ private val researchDepartments = listOf(
     ResearchDepartment(
         "Theory Evaluation",
         "थ्योरी का वैज्ञानिक मूल्यांकन",
-        "Refresh Theory की धारणाओं की वैज्ञानिक प्रमाणों के साथ तुलना और जाँच।",
+        "Compare and evaluate the ideas of Refresh Theory against scientific evidence.",
         listOf(
             ResearchTopic("Supported Claims", "प्रमाणों से समर्थित दावे"),
             ResearchTopic("Contradicted Claims", "प्रमाणों से मेल न खाने वाले दावे"),
@@ -90,7 +100,7 @@ private val researchDepartments = listOf(
     ResearchDepartment(
         "Robot System Experiment",
         "रोबोट सिस्टम प्रयोग",
-        "मानव और रोबोट सिस्टम की Stability, Refresh और Continuity से जुड़े भविष्य के प्रयोगों की योजना।",
+        "Plan future experiments related to stability, refresh and continuity in human and robot systems.",
         listOf(
             ResearchTopic("Human System", "मानव प्रणाली"),
             ResearchTopic("Robot System", "रोबोट प्रणाली"),
@@ -101,138 +111,223 @@ private val researchDepartments = listOf(
     )
 )
 
+private val researchQuestions = listOf(
+    ResearchQuestion(
+        title = "WHAT HAPPENS AFTER DEATH?",
+        hindiTitle = "मृत्यु के बाद हमारे अस्तित्व का क्या होता है?",
+        englishAnswer = """
+Death raises one of the deepest questions about existence: what happens to the information, identity and continuity associated with a living system?
+
+Refresh Theory proposes studying consciousness in relation to the Dynamic Stability of an Open System. A living system continuously exchanges matter and energy with its environment. Its components interact, change and maintain an organized structure.
+
+An important research question is: when this organization can no longer be maintained, what happens to the information and continuity associated with that system?
+
+The idea of a Zero Dimension or another state is a speculative possibility raised within this research. It is not an established scientific finding.
+
+This question requires clear definitions, testable hypotheses and scientific evidence. This research does not claim that consciousness survives death.
+        """.trimIndent(),
+        hindiAnswer = """
+मृत्यु हमारे अस्तित्व से जुड़ा एक बहुत बड़ा सवाल खड़ा करती है। जीवित सिस्टम से जुड़ी जानकारी, पहचान और निरंतरता का क्या होता है?
+
+Refresh Theory चेतना को Open System की Dynamic Stability के संबंध में समझने का प्रस्ताव रखती है। जीवित सिस्टम अपने वातावरण से लगातार पदार्थ और ऊर्जा का आदान-प्रदान करता है। उसके अलग-अलग हिस्से आपस में जुड़कर बदलते रहते हैं और एक संगठन बनाए रखते हैं।
+
+यहाँ एक महत्वपूर्ण शोध प्रश्न है: जब यह संगठन बनाए रखना संभव नहीं रहता, तो उस सिस्टम से जुड़ी जानकारी और निरंतरता का क्या होता है?
+
+Zero Dimension या किसी दूसरी अवस्था का विचार इस शोध में उठाई गई एक परिकल्पना है। यह अभी स्थापित वैज्ञानिक तथ्य नहीं है।
+
+इस सवाल की जाँच के लिए स्पष्ट परिभाषाएँ, जाँची जा सकने वाली परिकल्पनाएँ और वैज्ञानिक प्रमाण जरूरी हैं। यह शोध यह दावा नहीं करता कि चेतना मृत्यु के बाद भी बनी रहती है।
+        """.trimIndent(),
+        listOf(Color(0xFF542039), Color(0xFF251A3F))
+    ),
+    ResearchQuestion(
+        title = "WHY DO WE NEED REFRESH THEORY?",
+        hindiTitle = "Refresh Theory पर शोध क्यों जरूरी है?",
+        englishAnswer = """
+We still have important questions about how consciousness, memory, identity and the feeling of being “I” are related.
+
+Refresh Theory is a proposed framework for exploring these questions through Open Systems, Refresh Processes, Information Retention and Dynamic Stability.
+
+The research aims to examine how a system changes while maintaining its organization, how information is retained, and whether these processes can help us understand continuity.
+
+It also raises a long-term question: could some aspects of memory, identity or system organization ever be continued in another human or robot system?
+
+This is a research goal, not a proven technology. The purpose of this project is to define the ideas clearly, build experiments and compare results with scientific evidence.
+        """.trimIndent(),
+        hindiAnswer = """
+चेतना, याददाश्त, पहचान और “मैं हूँ” की अनुभूति के आपसी संबंधों को लेकर आज भी कई महत्वपूर्ण सवाल मौजूद हैं।
+
+Refresh Theory इन सवालों को Open System, Refresh Process, Information Retention और Dynamic Stability के माध्यम से समझने का एक प्रस्तावित ढाँचा है।
+
+इस शोध का उद्देश्य यह जाँचना है कि कोई सिस्टम बदलते हुए अपना संगठन कैसे बनाए रखता है, जानकारी किस तरह सुरक्षित रहती है और ये प्रक्रियाएँ निरंतरता को समझने में किस तरह मदद कर सकती हैं।
+
+इसके साथ एक भविष्य से जुड़ा सवाल भी है: क्या याददाश्त, पहचान या सिस्टम के संगठन के कुछ पहलुओं को कभी किसी दूसरे मानव या रोबोट सिस्टम में जारी रखा जा सकता है?
+
+यह एक शोध का लक्ष्य है, सिद्ध तकनीक नहीं। इस परियोजना का उद्देश्य विचारों को स्पष्ट करना, प्रयोग बनाना और परिणामों की वैज्ञानिक प्रमाणों से तुलना करना है।
+        """.trimIndent(),
+        listOf(Color(0xFF173C59), Color(0xFF172A49))
+    ),
+    ResearchQuestion(
+        title = "CAN CONSCIOUSNESS CONTINUE IN A ROBOT?",
+        hindiTitle = "क्या चेतना रोबोट में जारी रह सकती है?",
+        englishAnswer = """
+Artificial Intelligence and robotics are developing rapidly. This makes it important to study the difference between intelligent behaviour, memory, identity and conscious experience.
+
+A robot may store information, respond to its environment and maintain its internal processes. However, these abilities alone do not prove that it has subjective experience or a human-like sense of “I”.
+
+Refresh Theory proposes investigating whether the organization and continuity of an Open System can help us understand consciousness, and whether any aspects of a human system could be continued in a robotic system.
+
+A major challenge is distinguishing a copy of memories or behaviour from the continuation of first-person experience.
+
+At present, transferring human consciousness into a robot has not been scientifically demonstrated. This remains an open research question.
+        """.trimIndent(),
+        hindiAnswer = """
+Artificial Intelligence और Robotics तेजी से विकसित हो रहे हैं। इसलिए बुद्धिमान व्यवहार, याददाश्त, पहचान और सचेत अनुभव के बीच अंतर को समझना महत्वपूर्ण हो गया है।
+
+कोई रोबोट जानकारी सुरक्षित रख सकता है, अपने वातावरण के अनुसार प्रतिक्रिया दे सकता है और अपनी आंतरिक प्रक्रियाएँ चला सकता है। लेकिन केवल इन क्षमताओं से यह साबित नहीं होता कि उसके पास सचेत अनुभव या इंसान जैसी “मैं” की अनुभूति है।
+
+Refresh Theory यह जाँचने का प्रस्ताव रखती है कि Open System का संगठन और निरंतरता चेतना को समझने में किस तरह मदद कर सकते हैं और क्या मानव सिस्टम के कुछ पहलुओं को रोबोट सिस्टम में जारी रखा जा सकता है।
+
+एक बड़ी चुनौती यह समझना है कि याददाश्त या व्यवहार की कॉपी बनना और पहले व्यक्ति के अनुभव की निरंतरता — क्या ये दोनों एक ही बात हैं?
+
+फिलहाल इंसान की चेतना को रोबोट में ट्रांसफर करना वैज्ञानिक रूप से प्रदर्शित नहीं हुआ है। यह अभी एक खुला शोध प्रश्न है।
+        """.trimIndent(),
+        listOf(Color(0xFF174538), Color(0xFF16313C))
+    )
+)
+
+private val homeBackground = Color(0xFFF7F9FC)
 private val labBackground = Color(0xFF081321)
 private val panelColor = Color(0xFF12243A)
 private val accentBlue = Color(0xFF48C8FF)
 private val softText = Color(0xFFB7C9DA)
 
+private val departmentColors = listOf(
+    Color(0xFFEAF4FF),
+    Color(0xFFE9F8F1),
+    Color(0xFFF2EDFF),
+    Color(0xFFFFF5E7),
+    Color(0xFFE9F6FA)
+)
+
+private val departmentBorders = listOf(
+    Color(0xFFB8D9FA),
+    Color(0xFFB8E5CE),
+    Color(0xFFD4C5FA),
+    Color(0xFFF4D7A8),
+    Color(0xFFB7DFEA)
+)
+
+private val departmentTextColors = listOf(
+    Color(0xFF245A91),
+    Color(0xFF23734E),
+    Color(0xFF6546A3),
+    Color(0xFF94601C),
+    Color(0xFF24677C)
+)
+
 @Composable
 fun ResearchHomeScreen() {
     var selectedDepartment by remember { mutableIntStateOf(-1) }
+    var selectedQuestion by remember { mutableIntStateOf(-1) }
 
-    if (selectedDepartment >= 0) {
-        DepartmentDetailScreen(
-            department = researchDepartments[selectedDepartment],
-            onBack = { selectedDepartment = -1 }
-        )
-        return
+    when {
+        selectedDepartment >= 0 -> {
+            DepartmentDetailScreen(
+                department = researchDepartments[selectedDepartment],
+                onBack = { selectedDepartment = -1 }
+            )
+        }
+
+        selectedQuestion >= 0 -> {
+            QuestionDetailScreen(
+                question = researchQuestions[selectedQuestion],
+                onBack = { selectedQuestion = -1 }
+            )
+        }
+
+        else -> {
+            HomeScreenContent(
+                onDepartmentClick = { selectedDepartment = it },
+                onQuestionClick = { selectedQuestion = it }
+            )
+        }
     }
+}
 
+@Composable
+private fun HomeScreenContent(
+    onDepartmentClick: (Int) -> Unit,
+    onQuestionClick: (Int) -> Unit
+) {
     Surface(
         modifier = Modifier.fillMaxSize(),
-        color = labBackground
+        color = homeBackground
     ) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(18.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                end = 16.dp,
+                top = 22.dp,
+                bottom = 28.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(15.dp)
         ) {
             item {
-                Text(
-                    "REFRESH THEORY",
-                    color = accentBlue,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 2.sp
-                )
-                Text(
-                    "RESEARCH LAB",
-                    color = Color.White,
-                    fontSize = 29.sp,
-                    fontWeight = FontWeight.ExtraBold
-                )
-                Text(
-                    "A structured research environment",
-                    color = softText,
-                    fontSize = 14.sp
-                )
-            }
-
-            // Banner 1: Research challenge
-            item {
-                ResearchBanner(
-                    title = "THE QUESTION OF EXISTENCE",
-                    hindiTitle = "मृत्यु के बाद हमारे अस्तित्व का क्या होगा?",
-                    message = "Could death mean the end of our existence, or is there another possibility?",
-                    hindiMessage = "क्या मृत्यु के बाद हमारा अस्तित्व पूरी तरह समाप्त हो जाता है? Zero Dimension जैसी अवस्था का विचार एक परिकल्पना है, जिसका कोई प्रमाण अभी उपलब्ध नहीं है। लेकिन यह हमारे सामने एक बड़ी चुनौती और शोध का सवाल रखता है।",
-                    colors = listOf(
-                        Color(0xFF54202F),
-                        Color(0xFF351C45),
-                        Color(0xFF172A50)
+                Column {
+                    Text(
+                        "REFRESH THEORY",
+                        color = Color(0xFF245A91),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 2.sp
                     )
-                )
-            }
-
-            // Banner 2: Why Refresh Theory?
-            item {
-                ResearchBanner(
-                    title = "WHY DO WE NEED REFRESH THEORY?",
-                    hindiTitle = "Refresh Theory पर शोध क्यों जरूरी है?",
-                    message = "To explore consciousness, memory, identity and the continuity of existence.",
-                    hindiMessage = "यदि हम अपने अस्तित्व को लगातार बनाए रखने की संभावना समझना चाहते हैं, तो पहले चेतना, याददाश्त और पहचान को समझना होगा। ये कैसे काम करते हैं? इनके बीच क्या संबंध है? क्या इनकी निरंतरता किसी दूसरे मानव या रोबोट सिस्टम में संभव हो सकती है? Refresh Theory इन्हीं सवालों की जाँच करने का एक प्रयास है।",
-                    colors = listOf(
-                        Color(0xFF123B59),
-                        Color(0xFF143A48),
-                        Color(0xFF202D54)
+                    Text(
+                        "RESEARCH LAB",
+                        color = Color(0xFF172033),
+                        fontSize = 29.sp,
+                        fontWeight = FontWeight.ExtraBold
                     )
-                )
-            }
-
-            item {
-                ResearchBanner(
-                    title = "THE FUTURE OF HUMANITY",
-                    hindiTitle = "आने वाली तकनीक और मानवता का भविष्य",
-                    message = "AI and robotics are advancing. Understanding consciousness and identity may become an important scientific challenge.",
-                    hindiMessage = "आने वाले समय में AI और Robotics की क्षमता और बढ़ सकती है। इसलिए चेतना, याददाश्त और पहचान को समझने से जुड़े सवालों पर अभी से गंभीर शोध करना महत्वपूर्ण है।",
-                    colors = listOf(
-                        Color(0xFF123B59),
-                        Color(0xFF172B50),
-                        Color(0xFF30214D)
+                    Text(
+                        "Explore • Experiment • Evaluate",
+                        color = Color(0xFF64748B),
+                        fontSize = 13.sp
                     )
-                )
+                }
             }
 
             item {
-                Text(
-                    "RESEARCH DEPARTMENTS",
-                    color = Color.White,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    "05 RESEARCH MODULES • पाँच शोध विभाग",
-                    color = accentBlue,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                ResearchQuestionTicker(onQuestionClick)
+            }
+
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        "RESEARCH DEPARTMENTS",
+                        color = Color(0xFF172033),
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                    Text(
+                        "अपना रिसर्च विभाग चुनें",
+                        color = Color(0xFF64748B),
+                        fontSize = 13.sp
+                    )
+                }
             }
 
             itemsIndexed(researchDepartments) { index, department ->
-                DepartmentCard(
-                    number = index + 1,
+                HomeDepartmentCard(
+                    index = index,
                     department = department,
-                    onClick = { selectedDepartment = index }
-                )
-            }
-
-            item {
-                ResearchBanner(
-                    title = "JOIN THE RESEARCH",
-                    hindiTitle = "इस शोध का हिस्सा बनें",
-                    message = "Learn, explore, experiment and contribute to research updates.",
-                    hindiMessage = "इस Application के माध्यम से आप Refresh Theory को समझ सकते हैं, अपने प्रयोग कर सकते हैं और अपने अनुभव तथा शोध के परिणाम साझा कर सकते हैं। हमारा उद्देश्य मिलकर सवालों की जाँच करना और नए प्रमाणों के आधार पर शोध को आगे बढ़ाना है।",
-                    colors = listOf(
-                        Color(0xFF104A49),
-                        Color(0xFF123B59),
-                        Color(0xFF142B49)
-                    )
+                    onClick = { onDepartmentClick(index) }
                 )
             }
 
             item {
                 Text(
                     "REFRESH THEORY • RESEARCH FRAMEWORK",
-                    color = softText,
+                    color = Color(0xFF94A3B8),
                     fontSize = 10.sp,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -242,96 +337,71 @@ fun ResearchHomeScreen() {
 }
 
 @Composable
-private fun ResearchBanner(
-    title: String,
-    hindiTitle: String,
-    message: String,
-    hindiMessage: String,
-    colors: List<Color>
+private fun ResearchQuestionTicker(
+    onQuestionClick: (Int) -> Unit
 ) {
-    val transition = rememberInfiniteTransition(label = "bannerLight")
-    val lightPosition by transition.animateFloat(
-        initialValue = -0.5f,
-        targetValue = 1.5f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2600, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "lightPosition"
-    )
+    val listState = rememberLazyListState()
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .background(Brush.linearGradient(colors))
-            .padding(17.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(end = 8.dp)
-        ) {
-            Text(
-                title,
-                color = accentBlue,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(900)
+            listState.animateScrollToItem(
+                index = 3,
+                animationSpec = tween(
+                    durationMillis = 18000,
+                    easing = LinearEasing
+                )
             )
-
-            Spacer(Modifier.height(7.dp))
-
-            Text(
-                hindiTitle,
-                color = Color.White,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.ExtraBold,
-                lineHeight = 25.sp
-            )
-
-            Spacer(Modifier.height(8.dp))
-
-            Text(
-                message,
-                color = Color(0xFFD5E9F8),
-                fontSize = 13.sp,
-                lineHeight = 19.sp
-            )
-
-            Spacer(Modifier.height(8.dp))
-
-            Text(
-                hindiMessage,
-                color = Color.White,
-                fontSize = 14.sp,
-                lineHeight = 23.sp
-            )
+            listState.scrollToItem(0)
         }
+    }
 
-        BoxWithConstraints(modifier = Modifier.matchParentSize()) {
+    LazyRow(
+        state = listState,
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(9.dp),
+        contentPadding = PaddingValues(end = 12.dp)
+    ) {
+        itemsIndexed(listOf(0, 1, 2, 0, 1, 2)) { _, questionIndex ->
+            val question = researchQuestions[questionIndex]
+
             Box(
                 modifier = Modifier
-                    .offset(x = maxWidth * lightPosition)
-                    .width(30.dp)
-                    .fillMaxHeight()
-                    .graphicsLayer { alpha = 0.30f }
-                    .background(
-                        Brush.horizontalGradient(
-                            listOf(
-                                Color.Transparent,
-                                Color(0xFF8CE6FF),
-                                Color.Transparent
-                            )
-                        )
+                    .width(285.dp)
+                    .height(48.dp)
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(Brush.horizontalGradient(question.colors))
+                    .clickable { onQuestionClick(questionIndex) }
+                    .padding(horizontal = 12.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        question.hindiTitle,
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f)
                     )
-            )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "›",
+                        color = Color.White,
+                        fontSize = 23.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun DepartmentCard(
-    number: Int,
+private fun HomeDepartmentCard(
+    index: Int,
     department: ResearchDepartment,
     onClick: () -> Unit
 ) {
@@ -340,51 +410,178 @@ private fun DepartmentCard(
             .fillMaxWidth()
             .clickable { onClick() },
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = panelColor)
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            departmentBorders[index]
+        ),
+        colors = CardDefaults.cardColors(
+            containerColor = departmentColors[index]
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 2.dp
+        )
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(42.dp)
+                    .size(43.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFF1D4562)),
+                    .background(Color.White.copy(alpha = 0.85f)),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    number.toString().padStart(2, '0'),
-                    color = accentBlue,
-                    fontWeight = FontWeight.Bold
+                    (index + 1).toString().padStart(2, '0'),
+                    color = departmentTextColors[index],
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.ExtraBold
                 )
             }
 
-            Spacer(Modifier.width(14.dp))
+            Spacer(Modifier.width(13.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     department.title,
-                    color = Color.White,
+                    color = departmentTextColors[index],
                     fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp
+                    fontSize = 15.sp,
+                    lineHeight = 20.sp
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
                     department.subtitle,
-                    color = softText,
+                    color = Color(0xFF536579),
                     fontSize = 12.sp
                 )
-                Spacer(Modifier.height(7.dp))
+                Spacer(Modifier.height(6.dp))
                 Text(
                     department.status.uppercase(),
-                    color = accentBlue,
+                    color = departmentTextColors[index],
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
 
-            Text("›", color = accentBlue, fontSize = 28.sp)
+            Text(
+                "›",
+                color = departmentTextColors[index],
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@Composable
+private fun QuestionDetailScreen(
+    question: ResearchQuestion,
+    onBack: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = labBackground
+    ) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(18.dp),
+            verticalArrangement = Arrangement.spacedBy(15.dp)
+        ) {
+            item {
+                TextButton(onClick = onBack) {
+                    Text(
+                        "← BACK TO RESEARCH LAB",
+                        color = accentBlue
+                    )
+                }
+            }
+
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Brush.horizontalGradient(question.colors))
+                        .padding(18.dp)
+                ) {
+                    Column {
+                        Text(
+                            question.title,
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            question.hindiTitle,
+                            color = Color.White,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            lineHeight = 27.sp
+                        )
+                    }
+                }
+            }
+
+            item {
+                AnswerSection(
+                    heading = "ENGLISH EXPLANATION",
+                    text = question.englishAnswer
+                )
+            }
+
+            item {
+                AnswerSection(
+                    heading = "हिंदी में व्याख्या",
+                    text = question.hindiAnswer
+                )
+            }
+
+            item {
+                Text(
+                    "REFRESH THEORY • RESEARCH QUESTION",
+                    color = softText,
+                    fontSize = 10.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AnswerSection(
+    heading: String,
+    text: String
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(15.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = panelColor
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(17.dp)
+        ) {
+            Text(
+                heading,
+                color = accentBlue,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text,
+                color = Color.White,
+                fontSize = 14.sp,
+                lineHeight = 23.sp
+            )
         }
     }
 }
@@ -398,68 +595,72 @@ private fun DepartmentDetailScreen(
         modifier = Modifier.fillMaxSize(),
         color = labBackground
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(20.dp)
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            TextButton(onClick = onBack) {
-                Text("← BACK TO RESEARCH LAB", color = accentBlue)
+            item {
+                TextButton(onClick = onBack) {
+                    Text(
+                        "← BACK TO RESEARCH LAB",
+                        color = accentBlue
+                    )
+                }
             }
 
-            Spacer(Modifier.height(18.dp))
+            item {
+                Text(
+                    department.title,
+                    color = Color.White,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    lineHeight = 29.sp
+                )
+                Spacer(Modifier.height(5.dp))
+                Text(
+                    department.subtitle,
+                    color = accentBlue,
+                    fontSize = 14.sp
+                )
+            }
 
-            Text(
-                department.title,
-                color = Color.White,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.ExtraBold
-            )
+            item {
+                Text(
+                    "DEPARTMENT OVERVIEW",
+                    color = accentBlue,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp
+                )
+                Spacer(Modifier.height(7.dp))
+                Text(
+                    department.description,
+                    color = Color.White,
+                    fontSize = 15.sp,
+                    lineHeight = 24.sp
+                )
+            }
 
-            Text(
-                department.subtitle,
-                color = accentBlue,
-                fontSize = 14.sp
-            )
+            item {
+                Text(
+                    "RESEARCH AREAS • शोध के विषय",
+                    color = accentBlue,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp
+                )
+            }
 
-            Spacer(Modifier.height(22.dp))
-
-            Text(
-                "DEPARTMENT OVERVIEW",
-                color = accentBlue,
-                fontWeight = FontWeight.Bold,
-                fontSize = 12.sp
-            )
-
-            Spacer(Modifier.height(8.dp))
-
-            Text(
-                department.description,
-                color = Color.White,
-                fontSize = 16.sp,
-                lineHeight = 25.sp
-            )
-
-            Spacer(Modifier.height(24.dp))
-
-            Text(
-                "RESEARCH AREAS • शोध के विषय",
-                color = accentBlue,
-                fontWeight = FontWeight.Bold,
-                fontSize = 12.sp
-            )
-
-            Spacer(Modifier.height(10.dp))
-
-            department.focus.forEach { topic ->
+            itemsIndexed(department.focus) { _, topic ->
                 Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 9.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
                         containerColor = panelColor
                     ),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(13.dp),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        Color(0xFF29445F)
+                    )
                 ) {
                     Column(
                         modifier = Modifier
@@ -472,9 +673,7 @@ private fun DepartmentDetailScreen(
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold
                         )
-
-                        Spacer(Modifier.height(4.dp))
-
+                        Spacer(Modifier.height(5.dp))
                         Text(
                             topic.hindi,
                             color = softText,
@@ -484,19 +683,31 @@ private fun DepartmentDetailScreen(
                 }
             }
 
-            Spacer(Modifier.height(12.dp))
-
-            ResearchBanner(
-                title = department.status.uppercase(),
-                hindiTitle = "विभाग की वर्तमान स्थिति",
-                message = "This department is part of the research framework.",
-                hindiMessage = "यह विभाग अभी शोध के ढाँचे के रूप में व्यवस्थित किया जा रहा है। यहाँ अप्रमाणित परिणामों को वैज्ञानिक तथ्य के रूप में प्रस्तुत नहीं किया जाएगा।",
-                colors = listOf(
-                    Color(0xFF123B59),
-                    Color(0xFF142B49),
-                    Color(0xFF202D54)
-                )
-            )
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = panelColor
+                    ),
+                    shape = RoundedCornerShape(13.dp)
+                ) {
+                    Column(Modifier.padding(15.dp)) {
+                        Text(
+                            department.status.uppercase(),
+                            color = accentBlue,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(Modifier.height(7.dp))
+                        Text(
+                            "यह विभाग Refresh Theory के शोध ढाँचे का हिस्सा है। यहाँ अप्रमाणित परिणामों को वैज्ञानिक तथ्य के रूप में प्रस्तुत नहीं किया जाएगा।",
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            lineHeight = 22.sp
+                        )
+                    }
+                }
+            }
         }
     }
 }
