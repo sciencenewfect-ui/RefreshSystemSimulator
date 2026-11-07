@@ -1,15 +1,22 @@
-
 package com.refreshsystem.simulator
 
 import android.content.Context
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import org.json.JSONArray
@@ -64,87 +71,89 @@ private fun averageMemory(memories: List<MemoryItem>, fallback: Float): Float {
     return clamp(memories.map { it.strength }.average().toFloat())
 }
 
-private fun inaccessibleCount(state: SystemState): Int {
-    return state.memories.count { !it.accessible }
-}
+private fun inaccessibleCount(state: SystemState): Int =
+    state.memories.count { !it.accessible }
 
-private fun addLog(state: SystemState, message: String): List<String> {
-    return (listOf(message) + state.log).take(50)
-}
+private fun addLog(state: SystemState, message: String): List<String> =
+    (listOf(message) + state.log).take(50)
 
 private fun advanceOpenSystem(old: SystemState): SystemState {
-    if (old.activity <= 0f) return old
-
     val nextStep = old.step + 1
-    val exchangeEffect = old.exchange * 0.12f
-    val refreshEffect = old.refresh * 0.10f
-    val disturbanceEffect = old.disturbance * 0.12f
-    val lossEffect = old.informationLoss * (1f - old.retention) * 0.10f
+    val exchange = clamp(old.exchange)
+    val refresh = clamp(old.refresh)
+    val disturbance = clamp(old.disturbance)
+    val activity = clamp(old.activity)
 
-    val newMemories = old.memories.map { item ->
+    val incoming = exchange * refresh * activity
+    val loss = (1f - refresh) * 0.16f + disturbance * 0.10f
+    val organization = clamp(
+        old.organization + incoming * 0.035f - disturbance * 0.025f
+    )
+    val stability = clamp(
+        old.stability +
+            (refresh * exchange * 0.035f) -
+            (disturbance * 0.04f) -
+            ((1f - activity) * 0.025f)
+    )
+
+    val updatedMemories = old.memories.map { memory ->
         val newStrength = clamp(
-            item.strength +
-                (old.retention * 0.015f) -
-                (old.informationLoss * 0.025f) -
-                (old.disturbance * 0.010f)
+            memory.strength - loss * 0.025f + refresh * 0.008f
         )
-        item.copy(
+        memory.copy(
             strength = newStrength,
-            age = item.age + 1,
-            accessible = newStrength >= 0.20f
+            age = memory.age + 1,
+            accessible = newStrength > 0.12f && memory.accessible
         )
     }
 
-    val newMemory = averageMemory(newMemories, old.memory)
-    val newOrganization = clamp(
-        old.organization +
-            exchangeEffect +
-            refreshEffect -
-            disturbanceEffect -
-            lossEffect
+    val memoryLevel = averageMemory(updatedMemories, old.memory)
+    val identity = clamp(
+        old.identity + (stability * organization * 0.025f) -
+            (disturbance * 0.015f)
+    )
+    val reality = clamp(
+        old.reality + (identity * 0.02f) - (disturbance * 0.01f)
     )
 
-    val newStability = clamp(
-        old.stability +
-            (old.refresh * 0.035f) +
-            (old.exchange * 0.025f) +
-            (newOrganization - old.organization) * 0.08f -
-            (old.disturbance * 0.06f) -
-            (old.informationLoss * 0.04f)
-    )
-
-    val newIdentity = clamp(
-        old.identity +
-            (newMemory * 0.025f) +
-            (newStability * 0.015f) -
-            (old.disturbance * 0.015f)
-    )
-
-    val newReality = clamp(
-        old.reality +
-            (old.exchange * 0.02f) +
-            (old.refresh * 0.02f) +
-            (newMemory * 0.015f)
-    )
+    val newLog = if (nextStep % 5 == 0) {
+        addLog(
+            old,
+            "चक्र $nextStep: पदार्थ का आदान-प्रदान हुआ और सिस्टम ने अपनी संरचना बनाए रखने की कोशिश की।"
+        )
+    } else {
+        old.log
+    }
 
     return old.copy(
         step = nextStep,
-        stability = newStability,
-        memory = newMemory,
-        organization = newOrganization,
-        identity = newIdentity,
-        reality = newReality,
-        memories = newMemories,
-        processContinuity = 1f,
-        log = addLog(old, "चरण $nextStep: सिस्टम अपडेट हुआ।")
+        stability = stability,
+        memory = memoryLevel,
+        organization = organization,
+        identity = identity,
+        reality = reality,
+        processContinuity = clamp(
+            old.processContinuity + refresh * 0.006f - disturbance * 0.004f
+        ),
+        log = newLog,
+        memories = updatedMemories
     )
 }
 
-private fun saveSystem(context: Context, key: String, state: SystemState) {
-    val prefs = context.getSharedPreferences(
-        "refresh_research_records",
-        Context.MODE_PRIVATE
-    )
+private fun saveSystem(context: Context, state: SystemState) {
+    val prefs = context.getSharedPreferences("refresh_system", Context.MODE_PRIVATE)
+    val memories = JSONArray()
+    state.memories.forEach {
+        memories.put(
+            JSONObject().apply {
+                put("id", it.id)
+                put("content", it.content)
+                put("strength", it.strength.toDouble())
+                put("age", it.age)
+                put("accessible", it.accessible)
+            }
+        )
+    }
 
     val json = JSONObject().apply {
         put("step", state.step)
@@ -160,118 +169,67 @@ private fun saveSystem(context: Context, key: String, state: SystemState) {
         put("disturbance", state.disturbance.toDouble())
         put("informationLoss", state.informationLoss.toDouble())
         put("processContinuity", state.processContinuity.toDouble())
-
-        val logArray = JSONArray()
-        state.log.forEach { logArray.put(it) }
-        put("log", logArray)
-
-        val memoryArray = JSONArray()
-        state.memories.forEach { item ->
-            memoryArray.put(
-                JSONObject().apply {
-                    put("id", item.id)
-                    put("content", item.content)
-                    put("strength", item.strength.toDouble())
-                    put("age", item.age)
-                    put("accessible", item.accessible)
-                }
-            )
-        }
-        put("memories", memoryArray)
+        put("memories", memories)
+        put("log", JSONArray(state.log))
     }
 
-    prefs.edit().putString("system_$key", json.toString()).apply()
+    prefs.edit().putString("system_state", json.toString()).apply()
 }
 
-private fun parseSystem(jsonString: String?): SystemState? {
-    if (jsonString.isNullOrBlank()) return null
+private fun loadSystem(context: Context): SystemState {
+    val prefs = context.getSharedPreferences("refresh_system", Context.MODE_PRIVATE)
+    val raw = prefs.getString("system_state", null) ?: return initialSystem()
 
     return try {
-        val json = JSONObject(jsonString)
-
-        val oldMemory = clamp(json.optDouble("memory", 0.20).toFloat())
-        val memoryArray = json.optJSONArray("memories") ?: JSONArray()
+        val json = JSONObject(raw)
+        val memoriesJson = json.optJSONArray("memories") ?: JSONArray()
         val memories = mutableListOf<MemoryItem>()
 
-        for (i in 0 until memoryArray.length()) {
-            val item = memoryArray.optJSONObject(i) ?: continue
+        for (i in 0 until memoriesJson.length()) {
+            val item = memoriesJson.optJSONObject(i) ?: continue
             memories.add(
                 MemoryItem(
-                    id = item.optLong("id", System.currentTimeMillis() + i),
-                    content = item.optString("content", "Saved information"),
-                    strength = clamp(item.optDouble("strength", 0.5).toFloat()),
-                    age = item.optInt("age", 0),
+                    id = item.optLong("id"),
+                    content = item.optString("content"),
+                    strength = item.optDouble("strength", 1.0).toFloat(),
+                    age = item.optInt("age"),
                     accessible = item.optBoolean("accessible", true)
                 )
             )
         }
 
-        // पुराने वर्जन में केवल memory की संख्या सेव होती थी।
-        // उस पुराने डेटा को नए Memory Record में बदला जा रहा है।
-        if (memories.isEmpty() && oldMemory > 0f) {
-            memories.add(
-                MemoryItem(
-                    id = 1L,
-                    content = "Previously stored information (legacy record)",
-                    strength = oldMemory,
-                    age = 0,
-                    accessible = oldMemory >= 0.20f
-                )
-            )
-        }
-
-        val logArray = json.optJSONArray("log")
+        val logJson = json.optJSONArray("log") ?: JSONArray()
         val logs = mutableListOf<String>()
-        if (logArray != null) {
-            for (i in 0 until logArray.length()) {
-                logs.add(logArray.optString(i))
-            }
+        for (i in 0 until logJson.length()) {
+            logs.add(logJson.optString(i))
         }
 
         SystemState(
-            step = json.optInt("step", 0),
-            stability = clamp(json.optDouble("stability", 0.65).toFloat()),
-            exchange = clamp(json.optDouble("exchange", 0.50).toFloat()),
-            refresh = clamp(json.optDouble("refresh", 0.50).toFloat()),
-            retention = clamp(json.optDouble("retention", 0.50).toFloat()),
-            memory = averageMemory(memories, oldMemory),
-            organization = clamp(json.optDouble("organization", 0.20).toFloat()),
-            identity = clamp(json.optDouble("identity", 0.20).toFloat()),
-            reality = clamp(json.optDouble("reality", 0.20).toFloat()),
-            activity = clamp(json.optDouble("activity", 1.0).toFloat()),
-            disturbance = clamp(json.optDouble("disturbance", 0.10).toFloat()),
-            informationLoss = clamp(json.optDouble("informationLoss", 0.05).toFloat()),
-            processContinuity = clamp(json.optDouble("processContinuity", 1.0).toFloat()),
+            step = json.optInt("step"),
+            stability = json.optDouble("stability", 0.65).toFloat(),
+            exchange = json.optDouble("exchange", 0.50).toFloat(),
+            refresh = json.optDouble("refresh", 0.50).toFloat(),
+            retention = json.optDouble("retention", 0.50).toFloat(),
+            memory = json.optDouble("memory", 0.20).toFloat(),
+            organization = json.optDouble("organization", 0.20).toFloat(),
+            identity = json.optDouble("identity", 0.20).toFloat(),
+            reality = json.optDouble("reality", 0.20).toFloat(),
+            activity = json.optDouble("activity", 1.0).toFloat(),
+            disturbance = json.optDouble("disturbance", 0.10).toFloat(),
+            informationLoss = json.optDouble("informationLoss", 0.05).toFloat(),
+            processContinuity = json.optDouble("processContinuity", 1.0).toFloat(),
             log = logs.ifEmpty { listOf("पुराना सिस्टम डेटा लोड हुआ।") },
             memories = memories
         )
     } catch (_: Exception) {
-        null
+        initialSystem()
     }
-}
-
-private fun loadSystem(context: Context, key: String): SystemState {
-    val prefs = context.getSharedPreferences(
-        "refresh_research_records",
-        Context.MODE_PRIVATE
-    )
-    return parseSystem(prefs.getString("system_$key", null)) ?: initialSystem()
 }
 
 private fun saveExperiment(context: Context, record: ExperimentRecord) {
-    val prefs = context.getSharedPreferences(
-        "refresh_research_records",
-        Context.MODE_PRIVATE
-    )
-
-    val oldArray = try {
-        JSONArray(prefs.getString("experiment_history", "[]") ?: "[]")
-    } catch (_: Exception) {
-        JSONArray()
-    }
-
-    val newArray = JSONArray()
-    newArray.put(
+    val prefs = context.getSharedPreferences("refresh_experiments", Context.MODE_PRIVATE)
+    val array = JSONArray(prefs.getString("records", "[]"))
+    array.put(
         JSONObject().apply {
             put("name", record.name)
             put("step", record.step)
@@ -283,63 +241,67 @@ private fun saveExperiment(context: Context, record: ExperimentRecord) {
             put("inaccessibleRecords", record.inaccessibleRecords)
         }
     )
-
-    for (i in 0 until minOf(oldArray.length(), 99)) {
-        val item = oldArray.optJSONObject(i) ?: continue
-        newArray.put(item)
-    }
-
-    prefs.edit().putString("experiment_history", newArray.toString()).apply()
+    prefs.edit().putString("records", array.toString()).apply()
 }
 
 private fun loadExperiments(context: Context): List<ExperimentRecord> {
-    val prefs = context.getSharedPreferences(
-        "refresh_research_records",
-        Context.MODE_PRIVATE
-    )
+    val prefs = context.getSharedPreferences("refresh_experiments", Context.MODE_PRIVATE)
+    val array = JSONArray(prefs.getString("records", "[]"))
+    val records = mutableListOf<ExperimentRecord>()
 
-    return try {
-        val array = JSONArray(prefs.getString("experiment_history", "[]") ?: "[]")
-        buildList {
-            for (i in 0 until array.length()) {
-                val item = array.optJSONObject(i) ?: continue
-                add(
-                    ExperimentRecord(
-                        name = item.optString("name", "Experiment"),
-                        step = item.optInt("step", 0),
-                        stability = clamp(item.optDouble("stability", 0.0).toFloat()),
-                        memory = clamp(item.optDouble("memory", 0.0).toFloat()),
-                        organization = clamp(item.optDouble("organization", 0.0).toFloat()),
-                        identity = clamp(item.optDouble("identity", 0.0).toFloat()),
-                        reality = clamp(item.optDouble("reality", 0.0).toFloat()),
-                        inaccessibleRecords = item.optInt("inaccessibleRecords", 0)
-                    )
-                )
-            }
-        }
-    } catch (_: Exception) {
-        emptyList()
+    for (i in 0 until array.length()) {
+        val item = array.optJSONObject(i) ?: continue
+        records.add(
+            ExperimentRecord(
+                name = item.optString("name"),
+                step = item.optInt("step"),
+                stability = item.optDouble("stability").toFloat(),
+                memory = item.optDouble("memory").toFloat(),
+                organization = item.optDouble("organization").toFloat(),
+                identity = item.optDouble("identity").toFloat(),
+                reality = item.optDouble("reality").toFloat(),
+                inaccessibleRecords = item.optInt("inaccessibleRecords")
+            )
+        )
     }
+    return records
 }
+
+private fun percent(value: Float): String =
+    "${(clamp(value) * 100).toInt()}%"
+
+private fun formatFloat(value: Float): String =
+    String.format(Locale.US, "%.2f", value)
+
+private val RefreshBlue = Color(0xFF42A5F5)
+private val RefreshGreen = Color(0xFF66BB6A)
+private val RefreshOrange = Color(0xFFFFB74D)
+private val RefreshRed = Color(0xFFEF5350)
+private val RefreshBackground = Color(0xFF101820)
+private val RefreshCard = Color(0xFF1C2935)
 
 @Composable
 fun ResearchHomeScreen() {
-    var selectedLab by remember { mutableStateOf("home") }
+    var page by remember { mutableStateOf("home") }
 
-    MaterialTheme {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
-        ) {
-            when (selectedLab) {
-                "open" -> OpenSystemLab(onBack = { selectedLab = "home" })
-                "continuity" -> ContinuityLab(onBack = { selectedLab = "home" })
-                else -> MainResearchHome(
-                    onOpenSystem = { selectedLab = "open" },
-                    onContinuity = { selectedLab = "continuity" }
-                )
-            }
-        }
+    when (page) {
+        "formation" -> OpenSystemFormationLab(
+            onBack = { page = "home" },
+            onAdvancedLab = { page = "open" }
+        )
+
+        "open" -> OpenSystemLab(
+            onBack = { page = "formation" }
+        )
+
+        "continuity" -> ContinuityLab(
+            onBack = { page = "home" }
+        )
+
+        else -> MainResearchHome(
+            onOpenSystem = { page = "formation" },
+            onContinuity = { page = "continuity" }
+        )
     }
 }
 
@@ -351,379 +313,779 @@ private fun MainResearchHome(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(RefreshBackground)
             .verticalScroll(rememberScrollState())
             .padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Text("Refresh System", style = MaterialTheme.typography.headlineMedium)
         Text(
-            "Refresh Theory पर आधारित एक experimental open-system model.",
-            style = MaterialTheme.typography.bodyLarge
+            "REFRESH SYSTEM",
+            color = Color.White,
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold
         )
 
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp)) {
-                Text("इस ऐप का उद्देश्य", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "यह ऐप Open System, Information Exchange, Refresh Process, " +
-                        "Stability, Memory और Identity जैसे विचारों को एक simulation " +
-                        "के रूप में जांचने के लिए बनाया गया है।"
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "महत्वपूर्ण: Refresh Theory एक परिकल्पना है। यह simulation " +
-                        "चेतना या चेतना के transfer को वैज्ञानिक रूप से सिद्ध नहीं करता।",
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-        }
+        Text(
+            "Open System और Stability को प्रयोग के माध्यम से समझें।",
+            color = Color.LightGray
+        )
 
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onOpenSystem() }
-        ) {
-            Column(Modifier.padding(16.dp)) {
-                Text("1. Open System Simulation Lab", style = MaterialTheme.typography.titleLarge)
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "System Formation, Information Exchange, Refresh Process, " +
-                        "Dynamic Stability, Memory Formation, Memory Updating, " +
-                        "Identity और Internal Reality का simulation."
-                )
-                Spacer(Modifier.height(10.dp))
-                Button(onClick = onOpenSystem) {
-                    Text("Open System Lab खोलें")
-                }
-            }
-        }
+        LabHomeCard(
+            title = "Open System Formation & Refresh Lab",
+            subtitle = "कण कैसे जुड़ते हैं, अलग होते हैं और संरचना को बनाए रखते हैं।",
+            buttonText = "Simulation शुरू करें",
+            color = RefreshGreen,
+            onClick = onOpenSystem
+        )
 
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onContinuity() }
+        LabHomeCard(
+            title = "Existence Continuity & Transfer Lab",
+            subtitle = "मेमोरी, पहचान और निरंतरता के मॉडल का प्रयोग।",
+            buttonText = "Continuity Lab खोलें",
+            color = RefreshBlue,
+            onClick = onContinuity
+        )
+    }
+}
+
+@Composable
+private fun LabHomeCard(
+    title: String,
+    subtitle: String,
+    buttonText: String,
+    color: Color,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = RefreshCard),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Column(Modifier.padding(16.dp)) {
-                Text(
-                    "2. Existence Continuity & Transfer Lab",
-                    style = MaterialTheme.typography.titleLarge
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "Original System और System Copy के बीच Memory, Identity, " +
-                        "Development तथा Process Continuity की तुलना."
-                )
-                Spacer(Modifier.height(10.dp))
-                Button(onClick = onContinuity) {
-                    Text("Continuity Lab खोलें")
-                }
+            Text(title, color = Color.White, fontWeight = FontWeight.Bold)
+            Text(subtitle, color = Color.LightGray)
+            Button(
+                onClick = onClick,
+                colors = ButtonDefaults.buttonColors(containerColor = color)
+            ) {
+                Text(buttonText, color = Color.Black)
             }
         }
     }
 }
 
-@Composable
-private fun OpenSystemLab(onBack: () -> Unit) {
-    val context = LocalContext.current
-    var state by remember { mutableStateOf(loadSystem(context, "open_system")) }
-    var running by remember { mutableStateOf(false) }
-    var information by remember { mutableStateOf("") }
-    var retrievalCue by remember { mutableStateOf("") }
-    var experimentName by remember { mutableStateOf("") }
-    var status by remember { mutableStateOf("सिस्टम तैयार है।") }
-    var experiments by remember { mutableStateOf(loadExperiments(context)) }
+/* ---------------------------------------------------------
+   FORMATION AND REFRESH SIMULATION
+   --------------------------------------------------------- */
 
-    LaunchedEffect(running) {
-        while (running) {
-            delay(1200)
-            if (running && state.activity > 0f) {
-                state = advanceOpenSystem(state)
-                saveSystem(context, "open_system", state)
-                status = "सिस्टम का नया refresh cycle पूरा हुआ।"
-            }
+private data class FormationAtom(
+    val id: Int,
+    val x: Float,
+    val y: Float,
+    val entering: Boolean,
+    val age: Int
+)
+
+private data class FormationState(
+    val cycle: Int = 0,
+    val incoming: Int = 0,
+    val outgoing: Int = 0,
+    val refreshRate: Float = 0.55f,
+    val speed: Float = 1f,
+    val evolution: Float = 0f,
+    val isRunning: Boolean = false,
+    val atoms: List<FormationAtom> = emptyList(),
+    val lastEvent: String = "सिस्टम तैयार है।"
+)
+
+private val WPattern = listOf(
+    Offset(0.10f, 0.38f),
+    Offset(0.22f, 0.72f),
+    Offset(0.36f, 0.42f),
+    Offset(0.50f, 0.72f),
+    Offset(0.64f, 0.42f),
+    Offset(0.78f, 0.72f),
+    Offset(0.90f, 0.38f)
+)
+
+private fun createFormationAtoms(): List<FormationAtom> {
+    return WPattern.mapIndexed { index, point ->
+        FormationAtom(
+            id = index,
+            x = point.x,
+            y = point.y,
+            entering = false,
+            age = 0
+        )
+    }
+}
+
+private fun nextFormationCycle(state: FormationState): FormationState {
+    val nextCycle = state.cycle + 1
+    val atoms = state.atoms.ifEmpty { createFormationAtoms() }.toMutableList()
+
+    val numberToReplace = when {
+        state.refreshRate < 0.25f -> 1
+        state.refreshRate < 0.55f -> 2
+        state.refreshRate < 0.80f -> 3
+        else -> 4
+    }
+
+    var outgoing = 0
+    var incoming = 0
+
+    repeat(numberToReplace.coerceAtMost(atoms.size)) { index ->
+        val targetIndex = (nextCycle + index * 2) % atoms.size
+        val old = atoms[targetIndex]
+        atoms[targetIndex] = old.copy(
+            id = old.id + nextCycle * 100,
+            entering = true,
+            age = 0
+        )
+        outgoing++
+        incoming++
+    }
+
+    val updated = atoms.map {
+        it.copy(age = it.age + 1, entering = false)
+    }
+
+    val evolution = clamp(
+        state.evolution + (state.refreshRate * 0.0025f)
+    )
+
+    return state.copy(
+        cycle = nextCycle,
+        incoming = state.incoming + incoming,
+        outgoing = state.outgoing + outgoing,
+        evolution = evolution,
+        atoms = updated,
+        lastEvent = "चक्र $nextCycle: $incoming नए कण आए और $outgoing पुराने कण बाहर गए।"
+    )
+}
+
+@Composable
+private fun OpenSystemFormationLab(
+    onBack: () -> Unit,
+    onAdvancedLab: () -> Unit
+) {
+    var state by remember {
+        mutableStateOf(
+            FormationState(atoms = createFormationAtoms())
+        )
+    }
+
+    LaunchedEffect(state.isRunning, state.speed, state.refreshRate) {
+        while (state.isRunning) {
+            delay((1000L / state.speed.coerceIn(0.25f, 4f)).toLong())
+            state = nextFormationCycle(state)
         }
     }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(RefreshBackground)
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(onClick = onBack) {
+                Text("← वापस", color = RefreshBlue)
+            }
+            Spacer(Modifier.weight(1f))
+            Text(
+                "FORMATION LAB",
+                color = Color.White,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        Text(
+            "Open System: बनना और बिखरना",
+            color = Color.White,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold
+        )
+
+        Text(
+            "देखिए कि कण एक संरचना बनाते हैं। उसी समय कुछ पुराने कण बाहर जाते हैं और नए कण अंदर आते हैं।",
+            color = Color.LightGray
+        )
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = RefreshCard)
+        ) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    "जीवित संरचना का मॉडल",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+
+                FormationCanvas(
+                    atoms = state.atoms,
+                    evolution = state.evolution,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(230.dp)
+                )
+
+                Text(
+                    "बीच की संरचना W-पैटर्न को दिखाती है। बाहर से आने वाले और बाहर जाने वाले कण लगातार बदलते रहते हैं।",
+                    color = Color.LightGray,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FormationMetric(
+                title = "चक्र",
+                value = state.cycle.toString(),
+                color = RefreshBlue,
+                modifier = Modifier.weight(1f)
+            )
+            FormationMetric(
+                title = "अंदर आए",
+                value = state.incoming.toString(),
+                color = RefreshGreen,
+                modifier = Modifier.weight(1f)
+            )
+            FormationMetric(
+                title = "बाहर गए",
+                value = state.outgoing.toString(),
+                color = RefreshOrange,
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = RefreshCard)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    "Refresh Rate",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "एक चक्र में कितने कण बदलेंगे?",
+                    color = Color.LightGray
+                )
+                Slider(
+                    value = state.refreshRate,
+                    onValueChange = {
+                        state = state.copy(refreshRate = it)
+                    },
+                    valueRange = 0.05f..1f
+                )
+                Text(
+                    "${(state.refreshRate * 100).toInt()}% Refresh",
+                    color = RefreshGreen
+                )
+
+                Divider(color = Color.DarkGray)
+
+                Text(
+                    "Simulation Speed",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+                Slider(
+                    value = state.speed,
+                    onValueChange = {
+                        state = state.copy(speed = it)
+                    },
+                    valueRange = 0.25f..4f
+                )
+                Text(
+                    "${formatFloat(state.speed)}x",
+                    color = RefreshBlue
+                )
+            }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = RefreshCard)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    "Pattern Evolution",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "समय के साथ छोटे-छोटे बदलाव जमा होते हैं। इस मॉडल में Evolution Slider उसी बदलाव को दिखाता है।",
+                    color = Color.LightGray
+                )
+                LinearProgressIndicator(
+                    progress = { state.evolution },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = RefreshOrange
+                )
+                Text(
+                    "${(state.evolution * 100).toInt()}% परिवर्तन",
+                    color = RefreshOrange
+                )
+            }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = RefreshCard)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    "अभी क्या हुआ?",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    state.lastEvent,
+                    color = Color.LightGray
+                )
+                Text(
+                    "महत्वपूर्ण बात: इस मॉडल में संरचना का पैटर्न कुछ समय तक बना रहता है, जबकि उसके हिस्से बदलते रहते हैं।",
+                    color = RefreshGreen
+                )
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Button(
+                onClick = {
+                    state = state.copy(isRunning = !state.isRunning)
+                },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (state.isRunning) RefreshOrange else RefreshGreen
+                )
+            ) {
+                Text(
+                    if (state.isRunning) "Pause" else "Start",
+                    color = Color.Black
+                )
+            }
+
+            OutlinedButton(
+                onClick = {
+                    state = nextFormationCycle(state)
+                },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("One Cycle", color = Color.White)
+            }
+        }
+
+        OutlinedButton(
+            onClick = {
+                state = FormationState(atoms = createFormationAtoms())
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Reset Simulation", color = RefreshRed)
+        }
+
+        Button(
+            onClick = onAdvancedLab,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = RefreshBlue)
+        ) {
+            Text(
+                "Advanced Open System Lab खोलें",
+                color = Color.Black
+            )
+        }
+    }
+}
+
+@Composable
+private fun FormationCanvas(
+    atoms: List<FormationAtom>,
+    evolution: Float,
+    modifier: Modifier = Modifier
+) {
+    Canvas(
+        modifier = modifier
+            .background(
+                Color(0xFF0C151D),
+                RoundedCornerShape(14.dp)
+            )
+    ) {
+        val width = size.width
+        val height = size.height
+
+        val points = WPattern.mapIndexed { index, point ->
+            val curvedY = 0.48f + kotlin.math.sin(
+                (index.toFloat() / (WPattern.size - 1)) * Math.PI
+            ).toFloat() * 0.13f
+
+            Offset(
+                x = width * point.x,
+                y = height * (
+                    point.y * (1f - evolution) +
+                        curvedY * evolution
+                    )
+            )
+        }
+
+        for (i in 0 until points.size - 1) {
+            drawLine(
+                color = Color(0xFF4D718B),
+                start = points[i],
+                end = points[i + 1],
+                strokeWidth = 5f
+            )
+        }
+
+        points.forEachIndexed { index, point ->
+            drawCircle(
+                color = Color(0xFF263D4F),
+                radius = 18f,
+                center = point
+            )
+            drawCircle(
+                color = Color(0xFF64B5F6),
+                radius = 9f,
+                center = point
+            )
+            drawCircle(
+                color = Color.White,
+                radius = 3f,
+                center = point
+            )
+        }
+
+        atoms.forEachIndexed { index, atom ->
+            val base = points[index % points.size]
+            val offsetX = ((atom.id % 3) - 1) * 5f
+            val offsetY = ((atom.id % 5) - 2) * 3f
+            val position = Offset(
+                base.x + offsetX,
+                base.y + offsetY
+            )
+
+            drawCircle(
+                color = if (atom.entering) RefreshGreen else Color(0xFF90CAF9),
+                radius = 5f,
+                center = position
+            )
+        }
+
+        val leftDoor = Offset(width * 0.02f, height * 0.50f)
+        val rightDoor = Offset(width * 0.98f, height * 0.50f)
+
+        drawCircle(
+            color = RefreshGreen,
+            radius = 8f,
+            center = leftDoor
+        )
+        drawCircle(
+            color = RefreshOrange,
+            radius = 8f,
+            center = rightDoor
+        )
+
+        drawLine(
+            color = RefreshGreen.copy(alpha = 0.6f),
+            start = Offset(width * 0.02f, height * 0.50f),
+            end = Offset(width * 0.10f, height * 0.38f),
+            strokeWidth = 2f
+        )
+        drawLine(
+            color = RefreshOrange.copy(alpha = 0.6f),
+            start = Offset(width * 0.90f, height * 0.38f),
+            end = Offset(width * 0.98f, height * 0.50f),
+            strokeWidth = 2f
+        )
+    }
+}
+
+@Composable
+private fun FormationMetric(
+    title: String,
+    value: String,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = RefreshCard)
+    ) {
+        Column(
+            modifier = Modifier.padding(10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(title, color = Color.LightGray)
+            Text(
+                value,
+                color = color,
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleLarge
+            )
+        }
+    }
+}
+
+/* ---------------------------------------------------------
+   ADVANCED OPEN SYSTEM LAB
+   --------------------------------------------------------- */
+
+@Composable
+private fun OpenSystemLab(
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
+    var state by remember { mutableStateOf(loadSystem(context)) }
+    var isRunning by remember { mutableStateOf(false) }
+    var memoryInput by remember { mutableStateOf("") }
+    var experimentName by remember { mutableStateOf("") }
+    var experiments by remember { mutableStateOf(loadExperiments(context)) }
+
+    LaunchedEffect(isRunning) {
+        while (isRunning) {
+            delay(1000)
+            state = advanceOpenSystem(state)
+            saveSystem(context, state)
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(RefreshBackground)
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Button(onClick = onBack) { Text("← वापस") }
-        Text("Open System Simulation Lab", style = MaterialTheme.typography.headlineSmall)
+        TextButton(onClick = onBack) {
+            Text("← वापस", color = RefreshBlue)
+        }
+
         Text(
-            "यहाँ parameters बदलकर सिस्टम के व्यवहार को observe करें।",
-            style = MaterialTheme.typography.bodyMedium
+            "Advanced Open System Lab",
+            color = Color.White,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold
         )
 
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(14.dp)) {
-                Text("System Status", style = MaterialTheme.typography.titleMedium)
-                Text("Step: ${state.step}")
-                Text("Activity: ${if (state.activity > 0f) "Active" else "Stopped"}")
-                Text("Status: $status")
-                Text("Stored Memory Records: ${state.memories.size}")
-                Text("Inaccessible Records: ${inaccessibleCount(state)}")
-                Spacer(Modifier.height(8.dp))
-                ResultMetric("Stability", state.stability)
-                ResultMetric("Memory", state.memory)
-                ResultMetric("Organization", state.organization)
-                ResultMetric("Identity Indicator", state.identity)
-                ResultMetric("Internal Reality Indicator", state.reality)
+        Text(
+            "यहाँ Exchange, Refresh, Disturbance और Memory के मान बदलकर सिस्टम के व्यवहार को देख सकते हैं।",
+            color = Color.LightGray
+        )
+
+        MetricCard("Stability", state.stability)
+        MetricCard("Organization", state.organization)
+        MetricCard("Memory", state.memory)
+        MetricCard("Identity", state.identity)
+        MetricCard("Reality", state.reality)
+        MetricCard("Process Continuity", state.processContinuity)
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = RefreshCard)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("System Controls", color = Color.White, fontWeight = FontWeight.Bold)
+
+                ValueSlider(
+                    title = "Material Exchange",
+                    value = state.exchange,
+                    onChange = { state = state.copy(exchange = it) }
+                )
+                ValueSlider(
+                    title = "Refresh Rate",
+                    value = state.refresh,
+                    onChange = { state = state.copy(refresh = it) }
+                )
+                ValueSlider(
+                    title = "Memory Retention",
+                    value = state.retention,
+                    onChange = { state = state.copy(retention = it) }
+                )
+                ValueSlider(
+                    title = "Activity",
+                    value = state.activity,
+                    onChange = { state = state.copy(activity = it) }
+                )
+                ValueSlider(
+                    title = "Disturbance",
+                    value = state.disturbance,
+                    onChange = { state = state.copy(disturbance = it) }
+                )
             }
         }
 
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(14.dp)) {
-                Text("System Parameters", style = MaterialTheme.typography.titleMedium)
-                ParameterSlider("Information Exchange", state.exchange) {
-                    state = state.copy(exchange = it)
-                    saveSystem(context, "open_system", state)
-                }
-                ParameterSlider("Refresh Rate", state.refresh) {
-                    state = state.copy(refresh = it)
-                    saveSystem(context, "open_system", state)
-                }
-                ParameterSlider("Information Retention", state.retention) {
-                    state = state.copy(retention = it)
-                    saveSystem(context, "open_system", state)
-                }
-                ParameterSlider("Disturbance", state.disturbance) {
-                    state = state.copy(disturbance = it)
-                    saveSystem(context, "open_system", state)
-                }
-                ParameterSlider("Information Loss", state.informationLoss) {
-                    state = state.copy(informationLoss = it)
-                    saveSystem(context, "open_system", state)
-                }
-            }
-        }
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = RefreshCard)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text("Memory Input", color = Color.White, fontWeight = FontWeight.Bold)
 
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(14.dp)) {
-                Text("Information Exchange", style = MaterialTheme.typography.titleMedium)
                 OutlinedTextField(
-                    value = information,
-                    onValueChange = { information = it },
+                    value = memoryInput,
+                    onValueChange = { memoryInput = it },
                     label = { Text("कोई जानकारी लिखें") },
                     modifier = Modifier.fillMaxWidth(),
-                    minLines = 2
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedLabelColor = RefreshBlue,
+                        unfocusedLabelColor = Color.LightGray
+                    )
                 )
-                Spacer(Modifier.height(8.dp))
+
                 Button(
                     onClick = {
-                        val text = information.trim()
-                        if (text.isNotEmpty()) {
-                            val newItem = MemoryItem(
+                        if (memoryInput.isNotBlank()) {
+                            val item = MemoryItem(
                                 id = System.currentTimeMillis(),
-                                content = text,
-                                strength = 1f,
-                                age = 0,
-                                accessible = true
+                                content = memoryInput.trim()
                             )
-                            val updatedMemories = state.memories + newItem
                             state = state.copy(
-                                memories = updatedMemories,
-                                memory = averageMemory(updatedMemories, state.memory),
-                                exchange = clamp(state.exchange + 0.03f),
-                                organization = clamp(state.organization + 0.02f),
-                                log = addLog(state, "नई जानकारी सिस्टम में प्राप्त हुई।")
+                                memories = state.memories + item,
+                                memory = averageMemory(
+                                    state.memories + item,
+                                    state.memory
+                                ),
+                                log = addLog(state, "नई जानकारी मेमोरी में जोड़ी गई।")
                             )
-                            saveSystem(context, "open_system", state)
-                            information = ""
-                            status = "नई जानकारी Memory Record में सेव हुई।"
-                        } else {
-                            status = "पहले जानकारी लिखें।"
+                            memoryInput = ""
+                            saveSystem(context, state)
                         }
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Receive Information")
+                    Text("Memory में जोड़ें")
                 }
-            }
-        }
 
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(14.dp)) {
-                Text("Memory Retrieval", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "किसी शब्द या वाक्यांश से पहले से सेव जानकारी खोजें। " +
-                        "यह एक सरल cue-based simulation है।",
-                    style = MaterialTheme.typography.bodySmall
+                    "Stored Memories: ${state.memories.size}",
+                    color = RefreshGreen
                 )
-                OutlinedTextField(
-                    value = retrievalCue,
-                    onValueChange = { retrievalCue = it },
-                    label = { Text("Search cue") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                Button(
-                    onClick = {
-                        val cue = retrievalCue.trim()
-                        if (cue.isEmpty()) {
-                            status = "जानकारी खोजने के लिए कोई शब्द लिखें।"
-                        } else {
-                            val matches = state.memories.filter {
-                                it.content.contains(cue, ignoreCase = true)
-                            }
-                            if (matches.isNotEmpty()) {
-                                val updated = state.memories.map { item ->
-                                    if (matches.any { it.id == item.id }) {
-                                        item.copy(
-                                            strength = clamp(item.strength + 0.15f),
-                                            accessible = true
-                                        )
-                                    } else item
-                                }
-                                state = state.copy(
-                                    memories = updated,
-                                    memory = averageMemory(updated, state.memory),
-                                    log = addLog(
-                                        state,
-                                        "Cue-based retrieval: ${matches.size} record(s) मिले।"
-                                    )
-                                )
-                                status = "${matches.size} matching record(s) मिले।"
-                            } else {
-                                status = "इस cue से कोई matching record नहीं मिला।"
-                            }
-                            saveSystem(context, "open_system", state)
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Retrieve Information")
-                }
 
-                state.memories.take(8).forEach { item ->
-                    Divider()
-                    Text(
-                        item.content,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Text(
-                        "Strength: ${(item.strength * 100).toInt()}% • " +
-                            "Age: ${item.age} cycles • " +
-                            if (item.accessible) "Accessible" else "Currently inaccessible",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            }
-        }
-
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(14.dp)) {
-                Text("Memory Updating & Forgetting", style = MaterialTheme.typography.titleMedium)
-                Text(
-                    "इस प्रयोग में memory records की strength घटाई जा सकती है। " +
-                        "Record को मिटाने के बजाय उसकी accessibility कम की जाती है।"
-                )
-                Spacer(Modifier.height(8.dp))
-                Button(
-                    onClick = {
-                        val updated = state.memories.map { item ->
-                            val strength = clamp(item.strength - 0.25f)
-                            item.copy(
-                                strength = strength,
-                                accessible = strength >= 0.20f
+                state.memories.takeLast(8).forEach { item ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(item.content, color = Color.White)
+                            Text(
+                                "Strength: ${percent(item.strength)} | Age: ${item.age}",
+                                color = Color.LightGray,
+                                style = MaterialTheme.typography.bodySmall
                             )
                         }
-                        state = state.copy(
-                            memories = updated,
-                            memory = averageMemory(updated, state.memory),
-                            log = addLog(state, "Memory weakening प्रयोग किया गया।")
+                        Text(
+                            if (item.accessible) "Available" else "Weak",
+                            color = if (item.accessible) RefreshGreen else RefreshOrange
                         )
-                        saveSystem(context, "open_system", state)
-                        status = "Memory strength घटाई गई।"
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Reduce Memory Strength")
+                    }
+                    Divider(color = Color.DarkGray)
                 }
             }
         }
 
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(14.dp)) {
-                Text("Simulation Controls", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = {
-                            if (state.activity > 0f) {
-                                running = true
-                                status = "Simulation चल रहा है।"
-                            } else {
-                                status = "Zero State के बाद Reset करें।"
-                            }
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) { Text("Start") }
-
-                    Button(
-                        onClick = {
-                            running = false
-                            status = "Simulation pause किया गया।"
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) { Text("Pause") }
-                }
-                Spacer(Modifier.height(8.dp))
-                Button(
-                    onClick = {
-                        running = false
-                        state = state.copy(
-                            activity = 0f,
-                            processContinuity = 0f,
-                            log = addLog(state, "Zero State: simulation activity रोक दी गई।")
-                        )
-                        saveSystem(context, "open_system", state)
-                        status = "Zero State: model activity बंद है।"
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Enter Zero State")
-                }
-                OutlinedButton(
-                    onClick = {
-                        running = false
-                        state = initialSystem()
-                        saveSystem(context, "open_system", state)
-                        status = "Simulation reset हो गया।"
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Reset Current Simulation")
-                }
-                Text(
-                    "Zero State यहाँ केवल simulation activity बंद होने का नाम है। " +
-                        "यह वास्तविक जीवन, मृत्यु या चेतना के बारे में कोई प्रमाण नहीं है।",
-                    style = MaterialTheme.typography.bodySmall
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Button(
+                onClick = { isRunning = !isRunning },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isRunning) RefreshOrange else RefreshGreen
                 )
+            ) {
+                Text(if (isRunning) "Pause" else "Start", color = Color.Black)
+            }
+
+            OutlinedButton(
+                onClick = {
+                    state = advanceOpenSystem(state)
+                    saveSystem(context, state)
+                },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("One Step", color = Color.White)
             }
         }
 
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(14.dp)) {
-                Text("Save Experiment", style = MaterialTheme.typography.titleMedium)
+        OutlinedButton(
+            onClick = {
+                state = initialSystem()
+                isRunning = false
+                saveSystem(context, state)
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Reset System", color = RefreshRed)
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = RefreshCard)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("Save Experiment", color = Color.White, fontWeight = FontWeight.Bold)
+
                 OutlinedTextField(
                     value = experimentName,
                     onValueChange = { experimentName = it },
                     label = { Text("Experiment का नाम") },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedLabelColor = RefreshBlue,
+                        unfocusedLabelColor = Color.LightGray
+                    )
                 )
-                Spacer(Modifier.height(8.dp))
+
                 Button(
                     onClick = {
-                        val name = experimentName.trim().ifEmpty {
-                            "Experiment ${experiments.size + 1}"
-                        }
                         val record = ExperimentRecord(
-                            name = name,
+                            name = experimentName.ifBlank { "Experiment ${experiments.size + 1}" },
                             step = state.step,
                             stability = state.stability,
                             memory = state.memory,
@@ -735,294 +1097,281 @@ private fun OpenSystemLab(onBack: () -> Unit) {
                         saveExperiment(context, record)
                         experiments = loadExperiments(context)
                         experimentName = ""
-                        status = "Experiment record सेव हो गया।"
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Save Current Observation")
+                    Text("Save Current State")
                 }
 
-                if (experiments.isNotEmpty()) {
-                    Spacer(Modifier.height(8.dp))
-                    Text("Saved Experiments", style = MaterialTheme.typography.titleSmall)
-                    experiments.take(10).forEach { record ->
-                        Divider()
-                        Text(record.name, style = MaterialTheme.typography.bodyMedium)
+                experiments.takeLast(5).reversed().forEach { record ->
+                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(record.name, color = Color.White, fontWeight = FontWeight.Bold)
                         Text(
-                            "Step ${record.step} • Stability ${(record.stability * 100).toInt()}% • " +
-                                "Memory ${(record.memory * 100).toInt()}% • " +
-                                "Inaccessible: ${record.inaccessibleRecords}",
+                            "Step ${record.step} | Stability ${percent(record.stability)} | Memory ${percent(record.memory)}",
+                            color = Color.LightGray,
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
-                    if (experiments.size >= 2) {
-                        val first = experiments[1]
-                        val second = experiments[0]
-                        Divider()
-                        Text("Latest Two Experiments Comparison", style = MaterialTheme.typography.titleSmall)
-                        Text(
-                            "Stability difference: ${
-                                String.format(
-                                    Locale.getDefault(),
-                                    "%.1f",
-                                    (second.stability - first.stability) * 100
-                                )
-                            } percentage points"
-                        )
-                        Text(
-                            "Memory difference: ${
-                                String.format(
-                                    Locale.getDefault(),
-                                    "%.1f",
-                                    (second.memory - first.memory) * 100
-                                )
-                            } percentage points"
-                        )
-                    }
+                    Divider(color = Color.DarkGray)
                 }
             }
         }
 
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(14.dp)) {
-                Text("System Log", style = MaterialTheme.typography.titleMedium)
-                state.log.take(15).forEach {
-                    Text("• $it", style = MaterialTheme.typography.bodySmall)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = RefreshCard)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("Experiment Log", color = Color.White, fontWeight = FontWeight.Bold)
+                Text("Total Steps: ${state.step}", color = RefreshBlue)
+
+                state.log.take(12).forEach {
+                    Text("• $it", color = Color.LightGray)
                 }
             }
         }
-
-        Text(
-            "वैज्ञानिक सावधानी: इस मॉडल के परिणाम केवल चुने गए mathematical rules के अनुसार simulation outputs हैं। इन्हें वास्तविक चेतना, subjective experience या consciousness transfer का प्रमाण न मानें।",
-            style = MaterialTheme.typography.bodySmall
-        )
     }
 }
 
 @Composable
-private fun ContinuityLab(onBack: () -> Unit) {
-    val context = LocalContext.current
-
-    var original by remember {
-        mutableStateOf(loadSystem(context, "continuity_original"))
-    }
-    var copy by remember {
-        mutableStateOf(loadSystem(context, "continuity_copy"))
-    }
-    var hypothesis by remember { mutableStateOf("") }
-    var status by remember { mutableStateOf("Continuity Lab तैयार है।") }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Button(onClick = onBack) { Text("← वापस") }
-        Text(
-            "Existence Continuity & Transfer Lab",
-            style = MaterialTheme.typography.headlineSmall
-        )
-        Text(
-            "यहाँ Original System और उसकी Copy के बीच अलग-अलग विकास और source-process link की तुलना की जाती है।"
-        )
-
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(14.dp)) {
-                Text("Original System", style = MaterialTheme.typography.titleLarge)
-                Text("Step: ${original.step}")
-                ResultMetric("Stability", original.stability)
-                ResultMetric("Memory", original.memory)
-                ResultMetric("Organization", original.organization)
-                ResultMetric("Identity Indicator", original.identity)
-                Text("Source Process Link: 100%")
-                Spacer(Modifier.height(8.dp))
-                Button(
-                    onClick = {
-                        original = advanceOpenSystem(original).copy(
-                            processContinuity = 1f
-                        )
-                        saveSystem(context, "continuity_original", original)
-                        status = "Original System आगे बढ़ा।"
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Update Original System")
-                }
-                OutlinedButton(
-                    onClick = {
-                        original = initialSystem()
-                        saveSystem(context, "continuity_original", original)
-                        status = "Original System reset हुआ।"
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Reset Original")
-                }
-            }
-        }
-
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(14.dp)) {
-                Text("System Copy", style = MaterialTheme.typography.titleLarge)
-                Text("Step: ${copy.step}")
-                ResultMetric("Stability", copy.stability)
-                ResultMetric("Memory", copy.memory)
-                ResultMetric("Organization", copy.organization)
-                ResultMetric("Identity Indicator", copy.identity)
-                Text(
-                    "Source Process Link: ${
-                        (copy.processContinuity * 100).toInt()
-                    }%"
-                )
-                Spacer(Modifier.height(8.dp))
-                Button(
-                    onClick = {
-                        copy = advanceOpenSystem(copy).copy(
-                            processContinuity = 0f
-                        )
-                        saveSystem(context, "continuity_copy", copy)
-                        status = "Copy ने अपना अलग update cycle पूरा किया।"
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Update Copy Independently")
-                }
-                OutlinedButton(
-                    onClick = {
-                        copy = initialSystem().copy(processContinuity = 0f)
-                        saveSystem(context, "continuity_copy", copy)
-                        status = "Copy reset हुई।"
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Reset Copy")
-                }
-                OutlinedButton(
-                    onClick = {
-                        copy = original.copy(
-                            processContinuity = 0f,
-                            log = addLog(
-                                original,
-                                "Original System से नई Copy बनाई गई।"
-                            )
-                        )
-                        saveSystem(context, "continuity_copy", copy)
-                        status = "Original System की वर्तमान स्थिति से Copy बनाई गई।"
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Create Copy From Original")
-                }
-            }
-        }
-
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(14.dp)) {
-                Text("Comparison", style = MaterialTheme.typography.titleLarge)
-                Text(
-                    "Original और Copy की वर्तमान model values का अंतर:"
-                )
-                ComparisonLine("Stability", original.stability, copy.stability)
-                ComparisonLine("Memory", original.memory, copy.memory)
-                ComparisonLine("Organization", original.organization, copy.organization)
-                ComparisonLine("Identity Indicator", original.identity, copy.identity)
-                ComparisonLine("Internal Reality", original.reality, copy.reality)
-                Divider()
-                Text(
-                    "ध्यान दें: Copy में data समान हो सकता है, लेकिन उसका source process link अलग रखा गया है। यह मॉडल का नियम है; इससे वास्तविक व्यक्ति की चेतना transfer होने या न होने का निष्कर्ष नहीं निकलता।",
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-        }
-
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(14.dp)) {
-                Text("Transfer Hypothesis Notes", style = MaterialTheme.typography.titleMedium)
-                OutlinedTextField(
-                    value = hypothesis,
-                    onValueChange = { hypothesis = it },
-                    label = { Text("अपनी research observation लिखें") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 3
-                )
-                Spacer(Modifier.height(8.dp))
-                Button(
-                    onClick = {
-                        context.getSharedPreferences(
-                            "refresh_research_records",
-                            Context.MODE_PRIVATE
-                        ).edit()
-                            .putString("observation_transfer_hypothesis", hypothesis)
-                            .apply()
-                        status = "Research observation सेव हो गई।"
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Save Research Observation")
-                }
-                val savedNote = context.getSharedPreferences(
-                    "refresh_research_records",
-                    Context.MODE_PRIVATE
-                ).getString("observation_transfer_hypothesis", "") ?: ""
-                if (savedNote.isNotBlank()) {
-                    Divider()
-                    Text("Saved Observation", style = MaterialTheme.typography.titleSmall)
-                    Text(savedNote)
-                }
-            }
-        }
-
-        Text("Status: $status", style = MaterialTheme.typography.bodyMedium)
-        Text(
-            "यह Lab एक conceptual simulation है। Memory, identity और process continuity के model indicators को subjective consciousness का direct measurement नहीं माना जा सकता।",
-            style = MaterialTheme.typography.bodySmall
-        )
-    }
-}
-
-@Composable
-private fun ParameterSlider(
-    label: String,
-    value: Float,
-    onValueChange: (Float) -> Unit
+private fun MetricCard(
+    title: String,
+    value: Float
 ) {
-    Column(Modifier.fillMaxWidth()) {
-        Text("$label: ${(value * 100).toInt()}%")
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = RefreshCard)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(title, color = Color.White)
+                Text(percent(value), color = RefreshGreen, fontWeight = FontWeight.Bold)
+            }
+            LinearProgressIndicator(
+                progress = { clamp(value) },
+                modifier = Modifier.fillMaxWidth(),
+                color = RefreshGreen
+            )
+        }
+    }
+}
+
+@Composable
+private fun ValueSlider(
+    title: String,
+    value: Float,
+    onChange: (Float) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(title, color = Color.White)
+            Text(percent(value), color = RefreshBlue)
+        }
         Slider(
             value = value,
-            onValueChange = onValueChange,
+            onValueChange = onChange,
             valueRange = 0f..1f
         )
     }
 }
 
-@Composable
-private fun ResultMetric(label: String, value: Float) {
-    Column(Modifier.fillMaxWidth()) {
-        Text("$label: ${(value * 100).toInt()}%")
-        LinearProgressIndicator(
-            progress = { clamp(value) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(7.dp)
-        )
-        Spacer(Modifier.height(6.dp))
-    }
-}
+/* ---------------------------------------------------------
+   CONTINUITY AND TRANSFER LAB
+   --------------------------------------------------------- */
 
 @Composable
-private fun ComparisonLine(
-    label: String,
-    original: Float,
-    copy: Float
+private fun ContinuityLab(
+    onBack: () -> Unit
 ) {
-    Column(Modifier.fillMaxWidth()) {
+    var originalMemory by remember { mutableFloatStateOf(0.80f) }
+    var copyMemory by remember { mutableFloatStateOf(0.80f) }
+    var originalIdentity by remember { mutableFloatStateOf(0.90f) }
+    var copyIdentity by remember { mutableFloatStateOf(0.90f) }
+    var originalContinuity by remember { mutableFloatStateOf(1f) }
+    var copyContinuity by remember { mutableFloatStateOf(0f) }
+    var transferred by remember { mutableStateOf(false) }
+
+    val similarity = clamp(
+        (originalMemory + copyMemory + originalIdentity + copyIdentity) / 4f
+    )
+    val originalScore = clamp(
+        originalMemory * 0.35f +
+            originalIdentity * 0.35f +
+            originalContinuity * 0.30f
+    )
+    val copyScore = clamp(
+        copyMemory * 0.35f +
+            copyIdentity * 0.35f +
+            copyContinuity * 0.30f
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(RefreshBackground)
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        TextButton(onClick = onBack) {
+            Text("← वापस", color = RefreshBlue)
+        }
+
         Text(
-            "$label — Original: ${(original * 100).toInt()}% | " +
-                "Copy: ${(copy * 100).toInt()}%"
+            "Existence Continuity & Transfer Lab",
+            color = Color.White,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold
         )
-        Spacer(Modifier.height(4.dp))
+
+        Text(
+            "Original और Copy के बीच Memory, Identity और Continuity की तुलना करें।",
+            color = Color.LightGray
+        )
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = RefreshCard)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("Original System", color = RefreshGreen, fontWeight = FontWeight.Bold)
+                ValueSlider(
+                    "Original Memory",
+                    originalMemory
+                ) { originalMemory = it }
+                ValueSlider(
+                    "Original Identity",
+                    originalIdentity
+                ) { originalIdentity = it }
+                ValueSlider(
+                    "Original Continuity",
+                    originalContinuity
+                ) { originalContinuity = it }
+            }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = RefreshCard)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("Copy / New System", color = RefreshBlue, fontWeight = FontWeight.Bold)
+                ValueSlider(
+                    "Copy Memory",
+                    copyMemory
+                ) { copyMemory = it }
+                ValueSlider(
+                    "Copy Identity",
+                    copyIdentity
+                ) { copyIdentity = it }
+                ValueSlider(
+                    "Copy Continuity",
+                    copyContinuity
+                ) { copyContinuity = it }
+            }
+        }
+
+        MetricCard("Memory & Identity Similarity", similarity)
+        MetricCard("Original Continuity Score", originalScore)
+        MetricCard("Copy Continuity Score", copyScore)
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = RefreshCard)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("Transfer Experiment", color = Color.White, fontWeight = FontWeight.Bold)
+
+                Text(
+                    if (transferred) {
+                        "Transfer मॉडल चलाया गया। Original और Copy के मान अलग-अलग देखे जा सकते हैं।"
+                    } else {
+                        "Transfer शुरू करने पर Copy को Original की Memory और Identity के मान मिलेंगे। Continuity को अलग से नियंत्रित किया जा सकता है।"
+                    },
+                    color = Color.LightGray
+                )
+
+                Button(
+                    onClick = {
+                        copyMemory = originalMemory
+                        copyIdentity = originalIdentity
+                        copyContinuity = 0f
+                        transferred = true
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Copy Memory & Identity")
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        copyMemory = originalMemory
+                        copyIdentity = originalIdentity
+                        copyContinuity = originalContinuity
+                        transferred = true
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Copy All Values Including Continuity")
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        originalMemory = 0.80f
+                        copyMemory = 0.80f
+                        originalIdentity = 0.90f
+                        copyIdentity = 0.90f
+                        originalContinuity = 1f
+                        copyContinuity = 0f
+                        transferred = false
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Reset Experiment")
+                }
+            }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = RefreshCard)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("Observation", color = Color.White, fontWeight = FontWeight.Bold)
+                Text(
+                    "Memory और Identity के मान समान हो सकते हैं, जबकि Continuity का मान अलग हो सकता है। इस मॉडल में इन्हें अलग-अलग मापदंडों के रूप में रखा गया है।",
+                    color = Color.LightGray
+                )
+                Text(
+                    "Original Score: ${percent(originalScore)}",
+                    color = RefreshGreen
+                )
+                Text(
+                    "Copy Score: ${percent(copyScore)}",
+                    color = RefreshBlue
+                )
+            }
+        }
     }
 }
