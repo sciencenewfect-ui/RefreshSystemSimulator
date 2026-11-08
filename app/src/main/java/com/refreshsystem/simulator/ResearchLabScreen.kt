@@ -23,7 +23,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
 
-// FIX: Missing color definitions
 private val Green = Color(0xFF66BB6A)
 private val Orange = Color(0xFFFFB74D)
 private val Blue = Color(0xFF42A5F5)
@@ -441,11 +440,19 @@ private data class FormationAtom(
     val microPhase: Float = 0f
 )
 
+private enum class BoundarySide {
+    LEFT,
+    RIGHT,
+    TOP,
+    BOTTOM
+}
+
 private data class BoundaryParticle(
     val id: Int,
     val slot: Int,
     val progress: Float,
-    val entering: Boolean
+    val entering: Boolean,
+    val side: BoundarySide
 )
 
 private data class FormationState(
@@ -485,6 +492,36 @@ private fun formationStage(step: Int): Int = when {
     else -> 4
 }
 
+/*
+ * हर दिशा के लिए W-पैटर्न के पास वाले स्लॉट चुनना।
+ * चारों दिशाओं में अलग-अलग Entry और Exit दिखेंगे।
+ */
+private fun boundarySlots(
+    side: BoundarySide,
+    points: List<Pair<Float, Float>>,
+    count: Int
+): List<Int> {
+    val indices = points.indices.toList()
+
+    val sorted = when (side) {
+        BoundarySide.LEFT -> indices.sortedBy { points[it].first }
+        BoundarySide.RIGHT -> indices.sortedByDescending { points[it].first }
+        BoundarySide.TOP -> indices.sortedBy { points[it].second }
+        BoundarySide.BOTTOM -> indices.sortedByDescending { points[it].second }
+    }
+
+    return sorted.take(count.coerceAtLeast(1))
+}
+
+/*
+ * हर cycle में चारों तरफ से exchange।
+ *
+ * प्रत्येक दिशा में:
+ * 1. पुराना atom बाहर जाता है।
+ * 2. नया atom उसी दिशा से अंदर आता है।
+ *
+ * इसलिए एक ही side पर Entry और Exit दोनों साथ दिखाई देंगे।
+ */
 private fun nextFormationState(old: FormationState): FormationState {
     val nextStep = old.step + 1
     val stage = formationStage(nextStep)
@@ -494,7 +531,7 @@ private fun nextFormationState(old: FormationState): FormationState {
         .toMutableList()
 
     val boundary = old.boundaryParticles.mapNotNull { particle ->
-        val progress = particle.progress + 0.28f
+        val progress = particle.progress + 0.20f
         if (progress >= 1f) null
         else particle.copy(progress = progress)
     }.toMutableList()
@@ -503,48 +540,79 @@ private fun nextFormationState(old: FormationState): FormationState {
     var totalOut = old.totalOut
     var bondChanges = old.bondChanges
 
-    val refreshFraction = old.refreshPercent.coerceIn(0.01f, 0.50f)
+    val refreshFraction = old.refreshPercent.coerceIn(0.01f, 0.20f)
+
+    // कुल exchange count को चारों दिशाओं में बाँटना।
     val exchangeCount = (FORMATION_SLOTS * refreshFraction)
         .toInt()
         .coerceAtLeast(1)
 
-    // कुछ कण एक ही समय पर बाहर जाते और नए कण अंदर आते हैं।
-    if (stage >= 2 && nextStep % 2 == 0) {
-        repeat(exchangeCount.coerceAtMost(FORMATION_SLOTS)) { n ->
-            val slot = (nextStep * 3 + n * 7) % FORMATION_SLOTS
-            val oldAtomIndex = atoms.indexOfFirst { it.slot == slot }
+    val sideCount = (exchangeCount / 4).coerceAtLeast(1)
 
-            if (oldAtomIndex >= 0) {
-                val oldAtom = atoms[oldAtomIndex]
+    val points = formationPoints(
+        old.evolution,
+        old.environment,
+        nextStep
+    )
 
-                boundary.add(
-                    BoundaryParticle(
-                        id = oldAtom.id,
-                        slot = slot,
-                        progress = 0f,
-                        entering = false
+    val sides = listOf(
+        BoundarySide.LEFT,
+        BoundarySide.RIGHT,
+        BoundarySide.TOP,
+        BoundarySide.BOTTOM
+    )
+
+    if (nextStep % 2 == 0) {
+        sides.forEachIndexed { sideIndex, side ->
+
+            val selectedSlots = boundarySlots(
+                side = side,
+                points = points,
+                count = sideCount
+            )
+
+            selectedSlots.forEachIndexed { index, slot ->
+                val oldAtomIndex = atoms.indexOfFirst {
+                    it.slot == slot
+                }
+
+                if (oldAtomIndex >= 0) {
+                    val oldAtom = atoms[oldAtomIndex]
+
+                    // पुराना atom इसी दिशा से बाहर निकलेगा।
+                    boundary.add(
+                        BoundaryParticle(
+                            id = oldAtom.id,
+                            slot = slot,
+                            progress = 0f,
+                            entering = false,
+                            side = side
+                        )
                     )
-                )
 
-                val newId = (atoms.maxOfOrNull { it.id } ?: 0) + 1
+                    val newId = (atoms.maxOfOrNull { it.id } ?: 0) + 1
 
-                atoms[oldAtomIndex] = FormationAtom(
-                    id = newId,
-                    slot = slot,
-                    microPhase = nextStep * 0.41f + n
-                )
-
-                boundary.add(
-                    BoundaryParticle(
+                    // नया atom उसी स्लॉट पर सिस्टम में आएगा।
+                    atoms[oldAtomIndex] = FormationAtom(
                         id = newId,
                         slot = slot,
-                        progress = 0f,
-                        entering = true
+                        microPhase = nextStep * 0.41f + index + sideIndex
                     )
-                )
 
-                totalOut++
-                totalIn++
+                    // नया atom उसी दिशा से अंदर आएगा।
+                    boundary.add(
+                        BoundaryParticle(
+                            id = newId,
+                            slot = slot,
+                            progress = 0f,
+                            entering = true,
+                            side = side
+                        )
+                    )
+
+                    totalOut++
+                    totalIn++
+                }
             }
         }
     }
@@ -571,13 +639,13 @@ private fun nextFormationState(old: FormationState): FormationState {
     }
 
     val message = when (stage) {
-        1 -> "अभी कण इधर-उधर गति कर रहे हैं। कुछ अंदर आ रहे हैं और कुछ बाहर जा रहे हैं। अभी कोई निश्चित Pattern नहीं बना है।"
+        1 -> "चारों दिशाओं से कणों का प्रवेश और निकास हो रहा है। अभी कोई निश्चित पैटर्न नहीं बना है।"
 
-        2 -> "कण आपस में जुड़ रहे हैं। पुराने संबंध टूट रहे हैं और नए संबंध बन रहे हैं। W-पैटर्न उभरना शुरू हो रहा है।"
+        2 -> "चारों तरफ से पदार्थ का आदान-प्रदान जारी है। कण आपस में जुड़ रहे हैं और W-पैटर्न उभर रहा है।"
 
-        3 -> "अब W-पैटर्न बन चुका है। कुछ कण अंदर-बाहर हो रहे हैं और बाकी कण भी अंदर ही अंदर गति करके अपने संबंध बदल रहे हैं। पूरा Pattern Refresh हो रहा है, फिर भी W जैसा दिखाई दे रहा है।"
+        3 -> "W-पैटर्न बन चुका है। ऊपर, नीचे, बाएँ और दाएँ — चारों तरफ से कण अंदर भी आ रहे हैं और बाहर भी जा रहे हैं। अंदर के कण भी लगातार गति करके अपने संबंध बदल रहे हैं।"
 
-        else -> "लंबे समय के बदलाव जमा हो रहे हैं। वातावरण और सिस्टम के नियम अगले मिलते-जुलते Pattern की दिशा को प्रभावित कर रहे हैं।"
+        else -> "चारों दिशाओं में आदान-प्रदान और आंतरिक बदलाव जारी हैं। लंबे समय के बदलाव जमा होकर अगले मिलते-जुलते Pattern की दिशा को प्रभावित कर रहे हैं।"
     }
 
     return old.copy(
@@ -952,7 +1020,7 @@ private fun OpenSystemFormationLab(
                 )
 
                 Text(
-                    "शुरुआत में कण इधर-उधर गति करते हैं। कुछ अंदर आते हैं और कुछ बाहर जाते हैं।"
+                    "शुरुआत में कण इधर-उधर गति करते हैं। चारों दिशाओं से कुछ कण अंदर आते हैं और कुछ बाहर जाते हैं।"
                 )
 
                 Text(
@@ -960,7 +1028,7 @@ private fun OpenSystemFormationLab(
                 )
 
                 Text(
-                    "W-पैटर्न बनने के बाद भी पूरा Pattern Refresh होता रहता है। कुछ कण सीमा पार करते हैं, जबकि बाकी कण अंदर ही गति करते हैं और अपने संबंध बदलते हैं।"
+                    "W-पैटर्न बनने के बाद भी पूरा Pattern Refresh होता रहता है। ऊपर, नीचे, बाएँ और दाएँ — चारों तरफ से कुछ कण सीमा पार करते हैं। बाकी कण अंदर ही गति करते हैं और अपने संबंध बदलते हैं।"
                 )
 
                 Text(
@@ -1058,6 +1126,7 @@ private fun FormationCanvas(
             }
         }
 
+        // Internal atoms continuously move and refresh.
         state.atoms.forEach { atom ->
             val target = centers[atom.slot]
             val phase = atom.microPhase + state.step * 0.12f
@@ -1087,27 +1156,35 @@ private fun FormationCanvas(
             )
         }
 
+        /*
+         * Boundary particle animation:
+         * LEFT   = बाईं सीमा
+         * RIGHT  = दाईं सीमा
+         * TOP    = ऊपर की सीमा
+         * BOTTOM = नीचे की सीमा
+         *
+         * हर दिशा में Entry और Exit दोनों होते हैं।
+         */
         state.boundaryParticles.forEach { particle ->
             val target = centers[particle.slot]
             val p = particle.progress.coerceIn(0f, 1f)
 
-            val edgeX = if (particle.entering) {
-                -sx * 0.04f
-            } else {
-                sx * 1.04f
+            val outside = when (particle.side) {
+                BoundarySide.LEFT ->
+                    Offset(-sx * 0.06f, target.y)
+
+                BoundarySide.RIGHT ->
+                    Offset(sx * 1.06f, target.y)
+
+                BoundarySide.TOP ->
+                    Offset(target.x, -sy * 0.08f)
+
+                BoundarySide.BOTTOM ->
+                    Offset(target.x, sy * 1.08f)
             }
 
-            val start = if (particle.entering) {
-                Offset(edgeX, target.y)
-            } else {
-                target
-            }
-
-            val end = if (particle.entering) {
-                target
-            } else {
-                Offset(edgeX, target.y)
-            }
+            val start = if (particle.entering) outside else target
+            val end = if (particle.entering) target else outside
 
             val position = Offset(
                 start.x + (end.x - start.x) * p,
@@ -1115,6 +1192,13 @@ private fun FormationCanvas(
             )
 
             val color = if (particle.entering) Blue else Orange
+
+            drawLine(
+                color = color.copy(alpha = 0.40f),
+                start = if (particle.entering) outside else target,
+                end = position,
+                strokeWidth = 1.5.dp.toPx()
+            )
 
             drawCircle(
                 color.copy(alpha = 0.20f),
