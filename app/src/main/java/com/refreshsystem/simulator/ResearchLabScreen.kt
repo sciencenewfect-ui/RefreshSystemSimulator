@@ -86,9 +86,11 @@ private fun advanceOpenSystem(old: SystemState): SystemState {
 
     val incoming = exchange * refresh * activity
     val loss = (1f - refresh) * 0.16f + disturbance * 0.10f
+
     val organization = clamp(
         old.organization + incoming * 0.035f - disturbance * 0.025f
     )
+
     val stability = clamp(
         old.stability +
             (refresh * exchange * 0.035f) -
@@ -108,10 +110,12 @@ private fun advanceOpenSystem(old: SystemState): SystemState {
     }
 
     val memoryLevel = averageMemory(updatedMemories, old.memory)
+
     val identity = clamp(
         old.identity + (stability * organization * 0.025f) -
             (disturbance * 0.015f)
     )
+
     val reality = clamp(
         old.reality + (identity * 0.02f) - (disturbance * 0.01f)
     )
@@ -140,8 +144,9 @@ private fun advanceOpenSystem(old: SystemState): SystemState {
     )
 }
 
-private fun saveSystem(context: Context, state: SystemState) {
+private fun saveSystem(context: Context, key: String, state: SystemState) {
     val prefs = context.getSharedPreferences("refresh_system", Context.MODE_PRIVATE)
+
     val memories = JSONArray()
     state.memories.forEach {
         memories.put(
@@ -173,15 +178,14 @@ private fun saveSystem(context: Context, state: SystemState) {
         put("log", JSONArray(state.log))
     }
 
-    prefs.edit().putString("system_state", json.toString()).apply()
+    prefs.edit().putString(key, json.toString()).apply()
 }
 
-private fun loadSystem(context: Context): SystemState {
-    val prefs = context.getSharedPreferences("refresh_system", Context.MODE_PRIVATE)
-    val raw = prefs.getString("system_state", null) ?: return initialSystem()
+private fun parseSystem(jsonString: String?): SystemState? {
+    if (jsonString == null) return null
 
     return try {
-        val json = JSONObject(raw)
+        val json = JSONObject(jsonString)
         val memoriesJson = json.optJSONArray("memories") ?: JSONArray()
         val memories = mutableListOf<MemoryItem>()
 
@@ -200,6 +204,7 @@ private fun loadSystem(context: Context): SystemState {
 
         val logJson = json.optJSONArray("log") ?: JSONArray()
         val logs = mutableListOf<String>()
+
         for (i in 0 until logJson.length()) {
             logs.add(logJson.optString(i))
         }
@@ -218,17 +223,23 @@ private fun loadSystem(context: Context): SystemState {
             disturbance = json.optDouble("disturbance", 0.10).toFloat(),
             informationLoss = json.optDouble("informationLoss", 0.05).toFloat(),
             processContinuity = json.optDouble("processContinuity", 1.0).toFloat(),
-            log = logs.ifEmpty { listOf("पुराना सिस्टम डेटा लोड हुआ।") },
+            log = logs.ifEmpty { listOf("सिस्टम डेटा लोड हुआ।") },
             memories = memories
         )
     } catch (_: Exception) {
-        initialSystem()
+        null
     }
+}
+
+private fun loadSystem(context: Context, key: String): SystemState {
+    val prefs = context.getSharedPreferences("refresh_system", Context.MODE_PRIVATE)
+    return parseSystem(prefs.getString(key, null)) ?: initialSystem()
 }
 
 private fun saveExperiment(context: Context, record: ExperimentRecord) {
     val prefs = context.getSharedPreferences("refresh_experiments", Context.MODE_PRIVATE)
     val array = JSONArray(prefs.getString("records", "[]"))
+
     array.put(
         JSONObject().apply {
             put("name", record.name)
@@ -241,6 +252,7 @@ private fun saveExperiment(context: Context, record: ExperimentRecord) {
             put("inaccessibleRecords", record.inaccessibleRecords)
         }
     )
+
     prefs.edit().putString("records", array.toString()).apply()
 }
 
@@ -251,6 +263,7 @@ private fun loadExperiments(context: Context): List<ExperimentRecord> {
 
     for (i in 0 until array.length()) {
         val item = array.optJSONObject(i) ?: continue
+
         records.add(
             ExperimentRecord(
                 name = item.optString("name"),
@@ -264,6 +277,7 @@ private fun loadExperiments(context: Context): List<ExperimentRecord> {
             )
         )
     }
+
     return records
 }
 
@@ -273,35 +287,39 @@ private fun percent(value: Float): String =
 private fun formatFloat(value: Float): String =
     String.format(Locale.US, "%.2f", value)
 
-private val RefreshBlue = Color(0xFF42A5F5)
-private val RefreshGreen = Color(0xFF66BB6A)
-private val RefreshOrange = Color(0xFFFFB74D)
-private val RefreshRed = Color(0xFFEF5350)
-private val RefreshBackground = Color(0xFF101820)
-private val RefreshCard = Color(0xFF1C2935)
+/* ---------------------------------------------------------
+   MAIN NAVIGATION
+   --------------------------------------------------------- */
 
 @Composable
 fun ResearchHomeScreen() {
-    var page by remember { mutableStateOf("home") }
+    var selectedLab by remember { mutableStateOf("home") }
 
-    when (page) {
-        "formation" -> OpenSystemFormationLab(
-            onBack = { page = "home" },
-            onAdvancedLab = { page = "open" }
-        )
+    MaterialTheme {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            when (selectedLab) {
+                "formation" -> OpenSystemFormationLab(
+                    onBack = { selectedLab = "home" },
+                    onAdvancedLab = { selectedLab = "open" }
+                )
 
-        "open" -> OpenSystemLab(
-            onBack = { page = "formation" }
-        )
+                "open" -> OpenSystemLab(
+                    onBack = { selectedLab = "formation" }
+                )
 
-        "continuity" -> ContinuityLab(
-            onBack = { page = "home" }
-        )
+                "continuity" -> ContinuityLab(
+                    onBack = { selectedLab = "home" }
+                )
 
-        else -> MainResearchHome(
-            onOpenSystem = { page = "formation" },
-            onContinuity = { page = "continuity" }
-        )
+                else -> MainResearchHome(
+                    onOpenSystem = { selectedLab = "formation" },
+                    onContinuity = { selectedLab = "continuity" }
+                )
+            }
+        }
     }
 }
 
@@ -313,662 +331,932 @@ private fun MainResearchHome(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(RefreshBackground)
             .verticalScroll(rememberScrollState())
             .padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Text(
-            "REFRESH SYSTEM",
-            color = Color.White,
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold
+            "Refresh System",
+            style = MaterialTheme.typography.headlineMedium
         )
 
         Text(
-            "Open System और Stability को प्रयोग के माध्यम से समझें।",
-            color = Color.LightGray
+            "Refresh Theory पर आधारित Research Labs",
+            style = MaterialTheme.typography.bodyLarge
         )
 
-        LabHomeCard(
-            title = "Open System Formation & Refresh Lab",
-            subtitle = "कण कैसे जुड़ते हैं, अलग होते हैं और संरचना को बनाए रखते हैं।",
-            buttonText = "Simulation शुरू करें",
-            color = RefreshGreen,
-            onClick = onOpenSystem
-        )
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp)) {
+                Text(
+                    "Open System Formation & Refresh Lab",
+                    style = MaterialTheme.typography.titleLarge
+                )
 
-        LabHomeCard(
-            title = "Existence Continuity & Transfer Lab",
-            subtitle = "मेमोरी, पहचान और निरंतरता के मॉडल का प्रयोग।",
-            buttonText = "Continuity Lab खोलें",
-            color = RefreshBlue,
-            onClick = onContinuity
-        )
-    }
-}
+                Spacer(Modifier.height(8.dp))
 
-@Composable
-private fun LabHomeCard(
-    title: String,
-    subtitle: String,
-    buttonText: String,
-    color: Color,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = RefreshCard),
-        shape = RoundedCornerShape(18.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                Text(
+                    "Atom और Molecule से Pattern बनना, अंदर-बाहर का आदान-प्रदान, " +
+                        "Internal Refresh और लंबे समय में Pattern Evolution."
+                )
+
+                Spacer(Modifier.height(10.dp))
+
+                Button(onClick = onOpenSystem) {
+                    Text("पूरी Simulation शुरू करें")
+                }
+            }
+        }
+
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onContinuity() }
         ) {
-            Text(title, color = Color.White, fontWeight = FontWeight.Bold)
-            Text(subtitle, color = Color.LightGray)
-            Button(
-                onClick = onClick,
-                colors = ButtonDefaults.buttonColors(containerColor = color)
-            ) {
-                Text(buttonText, color = Color.Black)
+            Column(Modifier.padding(16.dp)) {
+                Text(
+                    "Existence Continuity & Transfer Lab",
+                    style = MaterialTheme.typography.titleLarge
+                )
+
+                Spacer(Modifier.height(8.dp))
+
+                Text(
+                    "Original System और Copy के बीच Memory, Identity और Continuity की तुलना।"
+                )
+
+                Spacer(Modifier.height(10.dp))
+
+                Button(onClick = onContinuity) {
+                    Text("Continuity Lab खोलें")
+                }
             }
         }
     }
 }
 
 /* ---------------------------------------------------------
-   FORMATION AND REFRESH SIMULATION
+   UNIFIED OPEN SYSTEM / REFRESH / EVOLUTION SIMULATION
    --------------------------------------------------------- */
 
 private data class FormationAtom(
     val id: Int,
-    val x: Float,
-    val y: Float,
-    val entering: Boolean,
-    val age: Int
+    val slot: Int,
+    val microPhase: Float = 0f
+)
+
+private data class BoundaryParticle(
+    val id: Int,
+    val slot: Int,
+    val progress: Float,
+    val entering: Boolean
 )
 
 private data class FormationState(
-    val cycle: Int = 0,
-    val incoming: Int = 0,
-    val outgoing: Int = 0,
-    val refreshRate: Float = 0.55f,
-    val speed: Float = 1f,
-    val evolution: Float = 0f,
-    val isRunning: Boolean = false,
+    val step: Int = 0,
     val atoms: List<FormationAtom> = emptyList(),
-    val lastEvent: String = "सिस्टम तैयार है।"
+    val boundaryParticles: List<BoundaryParticle> = emptyList(),
+    val refreshPercent: Float = 0.05f,
+    val internalMovement: Float = 0.55f,
+    val environment: Float = 0.50f,
+    val speed: Float = 1f,
+    val totalIn: Int = 0,
+    val totalOut: Int = 0,
+    val bondChanges: Int = 0,
+    val evolution: Float = 0f,
+    val isRunning: Boolean = true,
+    val lastEvent: String = "कण गति कर रहे हैं। अभी कोई निश्चित पैटर्न नहीं है।"
 )
 
-private val WPattern = listOf(
-    Offset(0.10f, 0.38f),
-    Offset(0.22f, 0.72f),
-    Offset(0.36f, 0.42f),
-    Offset(0.50f, 0.72f),
-    Offset(0.64f, 0.42f),
-    Offset(0.78f, 0.72f),
-    Offset(0.90f, 0.38f)
-)
+private const val FORMATION_SLOTS = 36
 
-private fun createFormationAtoms(): List<FormationAtom> {
-    return WPattern.mapIndexed { index, point ->
+private fun makeInitialFormation(): FormationState {
+    val atoms = (0 until FORMATION_SLOTS).map { index ->
         FormationAtom(
-            id = index,
-            x = point.x,
-            y = point.y,
-            entering = false,
-            age = 0
+            id = index + 1,
+            slot = index,
+            microPhase = index * 0.37f
         )
     }
+
+    return FormationState(atoms = atoms)
 }
 
-private fun nextFormationCycle(state: FormationState): FormationState {
-    val nextCycle = state.cycle + 1
-    val atoms = state.atoms.ifEmpty { createFormationAtoms() }.toMutableList()
+private fun formationStage(step: Int): Int = when {
+    step < 12 -> 1
+    step < 25 -> 2
+    step < 85 -> 3
+    else -> 4
+}
 
-    val numberToReplace = when {
-        state.refreshRate < 0.25f -> 1
-        state.refreshRate < 0.55f -> 2
-        state.refreshRate < 0.80f -> 3
-        else -> 4
+private fun nextFormationState(old: FormationState): FormationState {
+    val nextStep = old.step + 1
+    val stage = formationStage(nextStep)
+
+    val atoms = old.atoms
+        .ifEmpty { makeInitialFormation().atoms }
+        .toMutableList()
+
+    val boundary = old.boundaryParticles.mapNotNull { particle ->
+        val progress = particle.progress + 0.28f
+        if (progress >= 1f) null
+        else particle.copy(progress = progress)
+    }.toMutableList()
+
+    var totalIn = old.totalIn
+    var totalOut = old.totalOut
+    var bondChanges = old.bondChanges
+
+    val refreshFraction = old.refreshPercent.coerceIn(0.01f, 0.50f)
+    val exchangeCount = (FORMATION_SLOTS * refreshFraction)
+        .toInt()
+        .coerceAtLeast(1)
+
+    // Boundary Exchange: केवल कुछ कण सीमा पार करते हैं।
+    if (stage >= 2 && nextStep % 2 == 0) {
+        repeat(exchangeCount.coerceAtMost(FORMATION_SLOTS)) { n ->
+            val slot = (nextStep * 3 + n * 7) % FORMATION_SLOTS
+            val oldAtomIndex = atoms.indexOfFirst { it.slot == slot }
+
+            if (oldAtomIndex >= 0) {
+                val oldAtom = atoms[oldAtomIndex]
+
+                boundary.add(
+                    BoundaryParticle(
+                        id = oldAtom.id,
+                        slot = slot,
+                        progress = 0f,
+                        entering = false
+                    )
+                )
+
+                val newId = (atoms.maxOfOrNull { it.id } ?: 0) + 1
+
+                atoms[oldAtomIndex] = FormationAtom(
+                    id = newId,
+                    slot = slot,
+                    microPhase = nextStep * 0.41f + n
+                )
+
+                boundary.add(
+                    BoundaryParticle(
+                        id = newId,
+                        slot = slot,
+                        progress = 0f,
+                        entering = true
+                    )
+                )
+
+                totalOut++
+                totalIn++
+            }
+        }
     }
 
-    var outgoing = 0
-    var incoming = 0
-
-    repeat(numberToReplace.coerceAtMost(atoms.size)) { index ->
-        val targetIndex = (nextCycle + index * 2) % atoms.size
-        val old = atoms[targetIndex]
-        atoms[targetIndex] = old.copy(
-            id = old.id + nextCycle * 100,
-            entering = true,
-            age = 0
+    // Internal Refresh: सभी कणों की स्थिति और संबंध बदलते रहते हैं।
+    val movedAtoms = atoms.map { atom ->
+        atom.copy(
+            microPhase = atom.microPhase +
+                old.internalMovement * 0.34f + 0.08f
         )
-        outgoing++
-        incoming++
     }
 
-    val updated = atoms.map {
-        it.copy(age = it.age + 1, entering = false)
+    bondChanges += if (stage >= 2) {
+        2 + (old.internalMovement * 5).toInt()
+    } else {
+        0
     }
 
-    val evolution = clamp(
-        state.evolution + (state.refreshRate * 0.0025f)
-    )
+    val evolution = if (stage >= 4) {
+        (old.evolution + 0.0028f * (0.35f + old.environment))
+            .coerceAtMost(1f)
+    } else {
+        0f
+    }
 
-    return state.copy(
-        cycle = nextCycle,
-        incoming = state.incoming + incoming,
-        outgoing = state.outgoing + outgoing,
+    val message = when (stage) {
+        1 -> "अभी कण इधर-उधर गति कर रहे हैं। कुछ अंदर आ रहे हैं और कुछ बाहर जा रहे हैं। अभी कोई निश्चित Pattern नहीं बना है।"
+
+        2 -> "कण आपस में जुड़ रहे हैं। पुराने संबंध टूट रहे हैं और नए संबंध बन रहे हैं। W-पैटर्न उभरना शुरू हो रहा है।"
+
+        3 -> "अब W-पैटर्न बन चुका है। कुछ कण अंदर-बाहर हो रहे हैं और बाकी कण भी अंदर ही अंदर गति करके अपने संबंध बदल रहे हैं। पूरा Pattern Refresh हो रहा है, फिर भी W जैसा दिखाई दे रहा है।"
+
+        else -> "लंबे समय के बदलाव जमा हो रहे हैं। वातावरण और सिस्टम के नियम अगले मिलते-जुलते Pattern की दिशा को प्रभावित कर रहे हैं।"
+    }
+
+    return old.copy(
+        step = nextStep,
+        atoms = movedAtoms,
+        boundaryParticles = boundary,
+        totalIn = totalIn,
+        totalOut = totalOut,
+        bondChanges = bondChanges,
         evolution = evolution,
-        atoms = updated,
-        lastEvent = "चक्र $nextCycle: $incoming नए कण आए और $outgoing पुराने कण बाहर गए।"
+        lastEvent = message
     )
 }
+
+private fun formationPoints(
+    evolution: Float,
+    environment: Float,
+    step: Int
+): List<Pair<Float, Float>> {
+
+    val start = (0 until FORMATION_SLOTS).map { index ->
+        val t = index.toFloat() / (FORMATION_SLOTS - 1)
+        val x = 0.12f + 0.76f * t
+        val y = 0.20f + ((index * 37) % 61) / 100f
+        x to y
+    }
+
+    val wVertices = listOf(
+        0.12f to 0.28f,
+        0.24f to 0.72f,
+        0.38f to 0.36f,
+        0.50f to 0.72f,
+        0.63f to 0.36f,
+        0.76f to 0.72f,
+        0.88f to 0.28f
+    )
+
+    val w = (0 until FORMATION_SLOTS).map { index ->
+        val t = index.toFloat() / (FORMATION_SLOTS - 1)
+        val scaled = t * (wVertices.size - 1)
+        val segment = scaled.toInt().coerceAtMost(wVertices.size - 2)
+        val local = scaled - segment
+
+        val a = wVertices[segment]
+        val b = wVertices[segment + 1]
+
+        (a.first + (b.first - a.first) * local) to
+            (a.second + (b.second - a.second) * local)
+    }
+
+    val tPattern = (0 until FORMATION_SLOTS).map { index ->
+        val t = index.toFloat() / (FORMATION_SLOTS - 1)
+        val x = 0.12f + 0.76f * t
+
+        val y = if (t < 0.5f) {
+            0.36f + 0.30f * (t / 0.5f)
+        } else {
+            0.66f - 0.30f * ((t - 0.5f) / 0.5f)
+        }
+
+        x to y
+    }
+
+    val bPattern = (0 until FORMATION_SLOTS).map { index ->
+        val t = index.toFloat() / (FORMATION_SLOTS - 1)
+        val x = 0.12f + 0.76f * t
+        val y = 0.50f +
+            0.20f * kotlin.math.sin(t * Math.PI * 2.0).toFloat()
+
+        x to y
+    }
+
+    val environmentBias = environment.coerceIn(0f, 1f)
+    val nextPattern = if (environmentBias < 0.5f) {
+        tPattern
+    } else {
+        bPattern
+    }
+
+    val formProgress = when {
+        step < 12 -> 0f
+        step < 25 -> ((step - 12) / 13f).coerceIn(0f, 1f)
+        step < 85 -> 0f
+        else -> evolution.coerceIn(0f, 1f)
+    }
+
+    return (0 until FORMATION_SLOTS).map { index ->
+        val base = when {
+            step < 12 -> start[index]
+            else -> w[index]
+        }
+
+        val target = nextPattern[index]
+
+        val progress = if (step >= 85) formProgress else 0f
+
+        base.first + (target.first - base.first) * progress to
+            base.second + (target.second - base.second) * progress
+    }
+}
+
+/* ---------------------------------------------------------
+   MAIN SIMULATION SCREEN
+   --------------------------------------------------------- */
 
 @Composable
 private fun OpenSystemFormationLab(
     onBack: () -> Unit,
     onAdvancedLab: () -> Unit
 ) {
-    var state by remember {
-        mutableStateOf(
-            FormationState(atoms = createFormationAtoms())
-        )
+    var simulation by remember {
+        mutableStateOf(makeInitialFormation())
     }
 
-    LaunchedEffect(state.isRunning, state.speed, state.refreshRate) {
-        while (state.isRunning) {
-            delay((1000L / state.speed.coerceIn(0.25f, 4f)).toLong())
-            state = nextFormationCycle(state)
+    var running by remember { mutableStateOf(true) }
+
+    LaunchedEffect(running, simulation.speed) {
+        while (running) {
+            delay((650L / simulation.speed.coerceIn(0.4f, 3f)).toLong())
+            simulation = nextFormationState(simulation)
         }
+    }
+
+    val stage = formationStage(simulation.step)
+
+    val patternName = when {
+        stage < 2 -> "अभी कोई निश्चित Pattern नहीं"
+        stage < 4 -> "W Pattern"
+        simulation.environment < 0.5f -> "T जैसा संभावित Pattern"
+        else -> "B जैसा संभावित Pattern"
     }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(RefreshBackground)
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             TextButton(onClick = onBack) {
-                Text("← वापस", color = RefreshBlue)
+                Text("← वापस")
             }
+
             Spacer(Modifier.weight(1f))
+
             Text(
-                "FORMATION LAB",
-                color = Color.White,
+                "OPEN SYSTEM LAB",
                 fontWeight = FontWeight.Bold
             )
         }
 
         Text(
-            "Open System: बनना और बिखरना",
-            color = Color.White,
+            "Open System: Refresh से Evolution तक",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold
         )
 
         Text(
-            "देखिए कि कण एक संरचना बनाते हैं। उसी समय कुछ पुराने कण बाहर जाते हैं और नए कण अंदर आते हैं।",
-            color = Color.LightGray
+            "इस Simulation में देखिए कि कणों का लगातार बदलना कैसे एक Pattern को बनाए रख सकता है और लंबे समय में उसका स्वरूप कैसे बदल सकता है।"
         )
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = RefreshCard)
-        ) {
+        Card(Modifier.fillMaxWidth()) {
             Column(
-                modifier = Modifier.padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text(
-                    "जीवित संरचना का मॉडल",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        "Live Molecular Structure",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+
+                    Text(
+                        "चरण $stage / 4",
+                        color = Color(0xFF67E8F9)
+                    )
+                }
 
                 FormationCanvas(
-                    atoms = state.atoms,
-                    evolution = state.evolution,
+                    state = simulation,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(230.dp)
+                        .height(280.dp)
                 )
 
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    FormationLegend(Color(0xFF38BDF8), "नया प्रवेश")
+                    FormationLegend(Color(0xFFF59E0B), "बाहर निकास")
+                    FormationLegend(Color(0xFF4ADE80), "अंदर के कण")
+                }
+
                 Text(
-                    "बीच की संरचना W-पैटर्न को दिखाती है। बाहर से आने वाले और बाहर जाने वाले कण लगातार बदलते रहते हैं।",
-                    color = Color.LightGray,
-                    style = MaterialTheme.typography.bodySmall
+                    simulation.lastEvent,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            FormationMetric(
-                title = "चक्र",
-                value = state.cycle.toString(),
-                color = RefreshBlue,
-                modifier = Modifier.weight(1f)
-            )
-            FormationMetric(
-                title = "अंदर आए",
-                value = state.incoming.toString(),
-                color = RefreshGreen,
-                modifier = Modifier.weight(1f)
-            )
-            FormationMetric(
-                title = "बाहर गए",
-                value = state.outgoing.toString(),
-                color = RefreshOrange,
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = RefreshCard)
-        ) {
+        Card(Modifier.fillMaxWidth()) {
             Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    "Refresh Rate",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
+                    "प्रक्रिया की Timeline",
+                    style = MaterialTheme.typography.titleMedium
                 )
+
+                val stages = listOf(
+                    "1. कणों की गति और Entry / Exit",
+                    "2. कणों के जुड़ने से W-पैटर्न बनना",
+                    "3. W-पैटर्न का लगातार Refresh होना",
+                    "4. लंबे समय में Pattern Evolution"
+                )
+
+                stages.forEachIndexed { index, label ->
+                    val active = stage == index + 1
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            if (active) "●" else "○",
+                            color = if (active) {
+                                Color(0xFF22C55E)
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
+
+                        Spacer(Modifier.width(8.dp))
+
+                        Text(
+                            label,
+                            color = if (active) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        Card(Modifier.fillMaxWidth()) {
+            Column(
+                Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 Text(
-                    "एक चक्र में कितने कण बदलेंगे?",
-                    color = Color.LightGray
+                    "अभी सिस्टम में क्या हो रहा है?",
+                    style = MaterialTheme.typography.titleMedium
                 )
+
+                Text("वर्तमान Pattern: $patternName")
+                Text("सिस्टम के अंदर कण: ${simulation.atoms.size}")
+                Text("कुल अंदर आए: ${simulation.totalIn}")
+                Text("कुल बाहर गए: ${simulation.totalOut}")
+                Text("बदले / Refresh हुए Bonds: ${simulation.bondChanges}")
+                Text("Pattern Evolution: ${(simulation.evolution * 100).toInt()}%")
+
+                LinearProgressIndicator(
+                    progress = { simulation.evolution },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+
+        Card(Modifier.fillMaxWidth()) {
+            Column(
+                Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    "Simulation Controls",
+                    style = MaterialTheme.typography.titleMedium
+                )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { running = !running },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(if (running) "Pause" else "Play")
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            simulation = nextFormationState(simulation)
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("एक Cycle")
+                    }
+                }
+
+                Text(
+                    "Boundary Exchange: ${(simulation.refreshPercent * 100).toInt()}%"
+                )
+
                 Slider(
-                    value = state.refreshRate,
+                    value = simulation.refreshPercent,
                     onValueChange = {
-                        state = state.copy(refreshRate = it)
+                        simulation = simulation.copy(refreshPercent = it)
+                    },
+                    valueRange = 0.01f..0.20f
+                )
+
+                Text(
+                    "Internal Movement: ${(simulation.internalMovement * 100).toInt()}%"
+                )
+
+                Slider(
+                    value = simulation.internalMovement,
+                    onValueChange = {
+                        simulation = simulation.copy(internalMovement = it)
                     },
                     valueRange = 0.05f..1f
                 )
-                Text(
-                    "${(state.refreshRate * 100).toInt()}% Refresh",
-                    color = RefreshGreen
-                )
-
-                Divider(color = Color.DarkGray)
 
                 Text(
-                    "Simulation Speed",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
+                    "Environment Influence: ${(simulation.environment * 100).toInt()}%"
                 )
+
                 Slider(
-                    value = state.speed,
+                    value = simulation.environment,
                     onValueChange = {
-                        state = state.copy(speed = it)
+                        simulation = simulation.copy(environment = it)
                     },
-                    valueRange = 0.25f..4f
+                    valueRange = 0f..1f
                 )
+
                 Text(
-                    "${formatFloat(state.speed)}x",
-                    color = RefreshBlue
+                    "Simulation Speed: ${
+                        String.format(
+                            Locale.getDefault(),
+                            "%.1f",
+                            simulation.speed
+                        )
+                    }x"
                 )
+
+                Slider(
+                    value = simulation.speed,
+                    onValueChange = {
+                        simulation = simulation.copy(speed = it)
+                    },
+                    valueRange = 0.4f..3f
+                )
+
+                OutlinedButton(
+                    onClick = {
+                        running = false
+                        simulation = makeInitialFormation()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("पूरी प्रक्रिया फिर से शुरू करें")
+                }
+
+                OutlinedButton(
+                    onClick = onAdvancedLab,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Advanced Open System Lab खोलें")
+                }
             }
         }
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = RefreshCard)
-        ) {
+        Card(Modifier.fillMaxWidth()) {
             Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
-                    "Pattern Evolution",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
+                    "आसान भाषा में समझें",
+                    style = MaterialTheme.typography.titleMedium
                 )
+
                 Text(
-                    "समय के साथ छोटे-छोटे बदलाव जमा होते हैं। इस मॉडल में Evolution Slider उसी बदलाव को दिखाता है।",
-                    color = Color.LightGray
+                    "शुरुआत में कण इधर-उधर गति करते हैं। कुछ अंदर आते हैं और कुछ बाहर जाते हैं।"
                 )
-                LinearProgressIndicator(
-                    progress = { state.evolution },
-                    modifier = Modifier.fillMaxWidth(),
-                    color = RefreshOrange
-                )
+
                 Text(
-                    "${(state.evolution * 100).toInt()}% परिवर्तन",
-                    color = RefreshOrange
+                    "धीरे-धीरे कण जुड़ते हैं और W-पैटर्न बनता है।"
+                )
+
+                Text(
+                    "W-पैटर्न बनने के बाद भी पूरा Pattern Refresh होता रहता है। कुछ कण सीमा पार करते हैं, जबकि बाकी कण अंदर ही गति करते हैं और अपने संबंध बदलते हैं।"
+                )
+
+                Text(
+                    "इस Refresh के बावजूद कुछ समय तक W-पैटर्न पहचान में बना रहता है। लंबे समय में बदलाव जमा होकर नया मिलता-जुलता Pattern बना सकते हैं।"
                 )
             }
         }
+    }
+}
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = RefreshCard)
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    "अभी क्या हुआ?",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    state.lastEvent,
-                    color = Color.LightGray
-                )
-                Text(
-                    "महत्वपूर्ण बात: इस मॉडल में संरचना का पैटर्न कुछ समय तक बना रहता है, जबकि उसके हिस्से बदलते रहते हैं।",
-                    color = RefreshGreen
-                )
-            }
+@Composable
+private fun FormationLegend(
+    color: Color,
+    label: String
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Canvas(Modifier.size(10.dp)) {
+            drawCircle(color = color)
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Button(
-                onClick = {
-                    state = state.copy(isRunning = !state.isRunning)
-                },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (state.isRunning) RefreshOrange else RefreshGreen
-                )
-            ) {
-                Text(
-                    if (state.isRunning) "Pause" else "Start",
-                    color = Color.Black
-                )
-            }
+        Spacer(Modifier.width(5.dp))
 
-            OutlinedButton(
-                onClick = {
-                    state = nextFormationCycle(state)
-                },
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("One Cycle", color = Color.White)
-            }
-        }
-
-        OutlinedButton(
-            onClick = {
-                state = FormationState(atoms = createFormationAtoms())
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Reset Simulation", color = RefreshRed)
-        }
-
-        Button(
-            onClick = onAdvancedLab,
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(containerColor = RefreshBlue)
-        ) {
-            Text(
-                "Advanced Open System Lab खोलें",
-                color = Color.Black
-            )
-        }
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall
+        )
     }
 }
 
 @Composable
 private fun FormationCanvas(
-    atoms: List<FormationAtom>,
-    evolution: Float,
+    state: FormationState,
     modifier: Modifier = Modifier
 ) {
     Canvas(
-        modifier = modifier
-            .background(
-                Color(0xFF0C151D),
-                RoundedCornerShape(14.dp)
-            )
+        modifier.background(
+            Color(0xFF0B1220),
+            RoundedCornerShape(16.dp)
+        )
     ) {
-        val width = size.width
-        val height = size.height
+        val points = formationPoints(
+            state.evolution,
+            state.environment,
+            state.step
+        )
 
-        val points = WPattern.mapIndexed { index, point ->
-            val curvedY = 0.48f + kotlin.math.sin(
-                (index.toFloat() / (WPattern.size - 1)) * Math.PI
-            ).toFloat() * 0.13f
+        val sx = size.width
+        val sy = size.height
+        val stage = formationStage(state.step)
 
-            Offset(
-                x = width * point.x,
-                y = height * (
-                    point.y * (1f - evolution) +
-                        curvedY * evolution
+        val centers = points.map {
+            Offset(it.first * sx, it.second * sy)
+        }
+
+        // Open System की सीमा
+        drawRoundRect(
+            color = Color(0xFF64748B).copy(alpha = 0.55f),
+            topLeft = Offset(sx * 0.07f, sy * 0.10f),
+            size = androidx.compose.ui.geometry.Size(
+                sx * 0.86f,
+                sy * 0.80f
+            ),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(
+                18.dp.toPx()
+            ),
+            style = Stroke(width = 1.dp.toPx())
+        )
+
+        // Bonds लगातार बदलते रहते हैं।
+        if (stage >= 2) {
+            for (i in 0 until centers.lastIndex) {
+                val active = (state.step + i) % 6 != 0
+
+                drawLine(
+                    color = if (active) {
+                        Color(0xFF38BDF8).copy(alpha = 0.78f)
+                    } else {
+                        Color(0xFF64748B).copy(alpha = 0.25f)
+                    },
+                    start = centers[i],
+                    end = centers[i + 1],
+                    strokeWidth = if (active) {
+                        2.2.dp.toPx()
+                    } else {
+                        1.dp.toPx()
+                    }
+                )
+            }
+
+            for (i in 0 until centers.size - 3 step 3) {
+                val j = i + 2
+
+                if ((state.step + i) % 4 != 0) {
+                    drawLine(
+                        color = Color(0xFF818CF8).copy(alpha = 0.48f),
+                        start = centers[i],
+                        end = centers[j],
+                        strokeWidth = 1.2.dp.toPx()
                     )
+                }
+            }
+        }
+
+        // सभी अंदरूनी कणों की गति।
+        state.atoms.forEach { atom ->
+            val target = centers[atom.slot]
+            val phase = atom.microPhase + state.step * 0.12f
+
+            val movement = state.internalMovement *
+                (1.2f + (atom.slot % 4) * 0.35f) *
+                dpScale(this)
+
+            val x = target.x +
+                kotlin.math.sin(phase.toDouble()).toFloat() * movement
+
+            val y = target.y +
+                kotlin.math.cos((phase * 1.3f).toDouble()).toFloat() * movement
+
+            val point = Offset(x, y)
+
+            drawCircle(
+                Color(0xFF1E293B),
+                8.dp.toPx(),
+                point
+            )
+
+            drawCircle(
+                Color(0xFF4ADE80),
+                4.dp.toPx(),
+                point
             )
         }
 
-        for (i in 0 until points.size - 1) {
-            drawLine(
-                color = Color(0xFF4D718B),
-                start = points[i],
-                end = points[i + 1],
-                strokeWidth = 5f
-            )
-        }
+        // Entry और Exit एक साथ दिखते हैं।
+        state.boundaryParticles.forEach { particle ->
+            val target = centers[particle.slot]
+            val p = particle.progress.coerceIn(0f, 1f)
 
-        points.forEachIndexed { index, point ->
-            drawCircle(
-                color = Color(0xFF263D4F),
-                radius = 18f,
-                center = point
-            )
-            drawCircle(
-                color = Color(0xFF64B5F6),
-                radius = 9f,
-                center = point
-            )
-            drawCircle(
-                color = Color.White,
-                radius = 3f,
-                center = point
-            )
-        }
+            val edgeX = if (particle.entering) {
+                -sx * 0.04f
+            } else {
+                sx * 1.04f
+            }
 
-        atoms.forEachIndexed { index, atom ->
-            val base = points[index % points.size]
-            val offsetX = ((atom.id % 3) - 1) * 5f
-            val offsetY = ((atom.id % 5) - 2) * 3f
+            val start = if (particle.entering) {
+                Offset(edgeX, target.y)
+            } else {
+                target
+            }
+
+            val end = if (particle.entering) {
+                target
+            } else {
+                Offset(edgeX, target.y)
+            }
+
             val position = Offset(
-                base.x + offsetX,
-                base.y + offsetY
+                start.x + (end.x - start.x) * p,
+                start.y + (end.y - start.y) * p
+            )
+
+            val color = if (particle.entering) {
+                Color(0xFF38BDF8)
+            } else {
+                Color(0xFFF59E0B)
+            }
+
+            drawCircle(
+                color.copy(alpha = 0.20f),
+                10.dp.toPx(),
+                position
             )
 
             drawCircle(
-                color = if (atom.entering) RefreshGreen else Color(0xFF90CAF9),
-                radius = 5f,
-                center = position
+                color,
+                4.5.dp.toPx(),
+                position
             )
         }
 
-        val leftDoor = Offset(width * 0.02f, height * 0.50f)
-        val rightDoor = Offset(width * 0.98f, height * 0.50f)
+        // शुरुआत में बिखरे हुए कण।
+        if (stage == 1) {
+            for (i in 0 until 12) {
+                val x = sx * (0.12f + ((i * 23) % 75) / 100f)
+                val y = sy * (0.16f + ((i * 31) % 65) / 100f)
 
-        drawCircle(
-            color = RefreshGreen,
-            radius = 8f,
-            center = leftDoor
-        )
-        drawCircle(
-            color = RefreshOrange,
-            radius = 8f,
-            center = rightDoor
-        )
-
-        drawLine(
-            color = RefreshGreen.copy(alpha = 0.6f),
-            start = Offset(width * 0.02f, height * 0.50f),
-            end = Offset(width * 0.10f, height * 0.38f),
-            strokeWidth = 2f
-        )
-        drawLine(
-            color = RefreshOrange.copy(alpha = 0.6f),
-            start = Offset(width * 0.90f, height * 0.38f),
-            end = Offset(width * 0.98f, height * 0.50f),
-            strokeWidth = 2f
-        )
-    }
-}
-
-@Composable
-private fun FormationMetric(
-    title: String,
-    value: String,
-    color: Color,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = RefreshCard)
-    ) {
-        Column(
-            modifier = Modifier.padding(10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(title, color = Color.LightGray)
-            Text(
-                value,
-                color = color,
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.titleLarge
-            )
+                drawCircle(
+                    Color(0xFF67E8F9).copy(alpha = 0.7f),
+                    3.dp.toPx(),
+                    Offset(x, y)
+                )
+            }
         }
     }
 }
+
+private fun dpScale(
+    scope: androidx.compose.ui.graphics.drawscope.DrawScope
+): Float = scope.density * 1.0f
 
 /* ---------------------------------------------------------
    ADVANCED OPEN SYSTEM LAB
    --------------------------------------------------------- */
 
 @Composable
-private fun OpenSystemLab(
-    onBack: () -> Unit
-) {
+private fun OpenSystemLab(onBack: () -> Unit) {
     val context = LocalContext.current
-    var state by remember { mutableStateOf(loadSystem(context)) }
+
+    var state by remember {
+        mutableStateOf(loadSystem(context, "system_state"))
+    }
+
     var isRunning by remember { mutableStateOf(false) }
     var memoryInput by remember { mutableStateOf("") }
     var experimentName by remember { mutableStateOf("") }
-    var experiments by remember { mutableStateOf(loadExperiments(context)) }
+
+    var experiments by remember {
+        mutableStateOf(loadExperiments(context))
+    }
 
     LaunchedEffect(isRunning) {
         while (isRunning) {
             delay(1000)
             state = advanceOpenSystem(state)
-            saveSystem(context, state)
+            saveSystem(context, "system_state", state)
         }
     }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(RefreshBackground)
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         TextButton(onClick = onBack) {
-            Text("← वापस", color = RefreshBlue)
+            Text("← वापस")
         }
 
         Text(
             "Advanced Open System Lab",
-            color = Color.White,
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold
         )
 
         Text(
-            "यहाँ Exchange, Refresh, Disturbance और Memory के मान बदलकर सिस्टम के व्यवहार को देख सकते हैं।",
-            color = Color.LightGray
+            "Exchange, Refresh, Disturbance और Memory के मान बदलकर सिस्टम के व्यवहार को देखें।"
         )
 
-        MetricCard("Stability", state.stability)
-        MetricCard("Organization", state.organization)
-        MetricCard("Memory", state.memory)
-        MetricCard("Identity", state.identity)
-        MetricCard("Reality", state.reality)
-        MetricCard("Process Continuity", state.processContinuity)
+        ResultMetric("Stability", state.stability)
+        ResultMetric("Organization", state.organization)
+        ResultMetric("Memory", state.memory)
+        ResultMetric("Identity", state.identity)
+        ResultMetric("Reality", state.reality)
+        ResultMetric("Process Continuity", state.processContinuity)
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = RefreshCard)
-        ) {
+        Card(Modifier.fillMaxWidth()) {
             Column(
-                modifier = Modifier.padding(16.dp),
+                Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("System Controls", color = Color.White, fontWeight = FontWeight.Bold)
+                Text(
+                    "System Controls",
+                    style = MaterialTheme.typography.titleMedium
+                )
 
-                ValueSlider(
-                    title = "Material Exchange",
-                    value = state.exchange,
-                    onChange = { state = state.copy(exchange = it) }
-                )
-                ValueSlider(
-                    title = "Refresh Rate",
-                    value = state.refresh,
-                    onChange = { state = state.copy(refresh = it) }
-                )
-                ValueSlider(
-                    title = "Memory Retention",
-                    value = state.retention,
-                    onChange = { state = state.copy(retention = it) }
-                )
-                ValueSlider(
-                    title = "Activity",
-                    value = state.activity,
-                    onChange = { state = state.copy(activity = it) }
-                )
-                ValueSlider(
-                    title = "Disturbance",
-                    value = state.disturbance,
-                    onChange = { state = state.copy(disturbance = it) }
-                )
+                ParameterSlider(
+                    "Material Exchange",
+                    state.exchange
+                ) {
+                    state = state.copy(exchange = it)
+                }
+
+                ParameterSlider(
+                    "Refresh Rate",
+                    state.refresh
+                ) {
+                    state = state.copy(refresh = it)
+                }
+
+                ParameterSlider(
+                    "Memory Retention",
+                    state.retention
+                ) {
+                    state = state.copy(retention = it)
+                }
+
+                ParameterSlider(
+                    "Activity",
+                    state.activity
+                ) {
+                    state = state.copy(activity = it)
+                }
+
+                ParameterSlider(
+                    "Disturbance",
+                    state.disturbance
+                ) {
+                    state = state.copy(disturbance = it)
+                }
             }
         }
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = RefreshCard)
-        ) {
+        Card(Modifier.fillMaxWidth()) {
             Column(
-                modifier = Modifier.padding(16.dp),
+                Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text("Memory Input", color = Color.White, fontWeight = FontWeight.Bold)
+                Text(
+                    "Memory Input",
+                    style = MaterialTheme.typography.titleMedium
+                )
 
                 OutlinedTextField(
                     value = memoryInput,
                     onValueChange = { memoryInput = it },
                     label = { Text("कोई जानकारी लिखें") },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        focusedLabelColor = RefreshBlue,
-                        unfocusedLabelColor = Color.LightGray
-                    )
+                    modifier = Modifier.fillMaxWidth()
                 )
 
                 Button(
@@ -978,16 +1266,20 @@ private fun OpenSystemLab(
                                 id = System.currentTimeMillis(),
                                 content = memoryInput.trim()
                             )
+
+                            val updated = state.memories + item
+
                             state = state.copy(
-                                memories = state.memories + item,
-                                memory = averageMemory(
-                                    state.memories + item,
-                                    state.memory
-                                ),
-                                log = addLog(state, "नई जानकारी मेमोरी में जोड़ी गई।")
+                                memories = updated,
+                                memory = averageMemory(updated, state.memory),
+                                log = addLog(
+                                    state,
+                                    "नई जानकारी मेमोरी में जोड़ी गई।"
+                                )
                             )
+
                             memoryInput = ""
-                            saveSystem(context, state)
+                            saveSystem(context, "system_state", state)
                         }
                     },
                     modifier = Modifier.fillMaxWidth()
@@ -995,30 +1287,22 @@ private fun OpenSystemLab(
                     Text("Memory में जोड़ें")
                 }
 
-                Text(
-                    "Stored Memories: ${state.memories.size}",
-                    color = RefreshGreen
-                )
+                Text("Stored Memories: ${state.memories.size}")
 
                 state.memories.takeLast(8).forEach { item ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(item.content, color = Color.White)
-                            Text(
-                                "Strength: ${percent(item.strength)} | Age: ${item.age}",
-                                color = Color.LightGray,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
+                    Column {
+                        Text(item.content)
+                        Text(
+                            "Strength: ${percent(item.strength)} | Age: ${item.age}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
                         Text(
                             if (item.accessible) "Available" else "Weak",
-                            color = if (item.accessible) RefreshGreen else RefreshOrange
+                            color = if (item.accessible) Green else Orange
                         )
                     }
-                    Divider(color = Color.DarkGray)
+
+                    HorizontalDivider()
                 }
             }
         }
@@ -1029,22 +1313,19 @@ private fun OpenSystemLab(
         ) {
             Button(
                 onClick = { isRunning = !isRunning },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isRunning) RefreshOrange else RefreshGreen
-                )
+                modifier = Modifier.weight(1f)
             ) {
-                Text(if (isRunning) "Pause" else "Start", color = Color.Black)
+                Text(if (isRunning) "Pause" else "Start")
             }
 
             OutlinedButton(
                 onClick = {
                     state = advanceOpenSystem(state)
-                    saveSystem(context, state)
+                    saveSystem(context, "system_state", state)
                 },
                 modifier = Modifier.weight(1f)
             ) {
-                Text("One Step", color = Color.White)
+                Text("One Step")
             }
         }
 
@@ -1052,40 +1333,36 @@ private fun OpenSystemLab(
             onClick = {
                 state = initialSystem()
                 isRunning = false
-                saveSystem(context, state)
+                saveSystem(context, "system_state", state)
             },
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("Reset System", color = RefreshRed)
+            Text("Reset System")
         }
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = RefreshCard)
-        ) {
+        Card(Modifier.fillMaxWidth()) {
             Column(
-                modifier = Modifier.padding(16.dp),
+                Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("Save Experiment", color = Color.White, fontWeight = FontWeight.Bold)
+                Text(
+                    "Save Experiment",
+                    style = MaterialTheme.typography.titleMedium
+                )
 
                 OutlinedTextField(
                     value = experimentName,
                     onValueChange = { experimentName = it },
                     label = { Text("Experiment का नाम") },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        focusedLabelColor = RefreshBlue,
-                        unfocusedLabelColor = Color.LightGray
-                    )
+                    modifier = Modifier.fillMaxWidth()
                 )
 
                 Button(
                     onClick = {
                         val record = ExperimentRecord(
-                            name = experimentName.ifBlank { "Experiment ${experiments.size + 1}" },
+                            name = experimentName.ifBlank {
+                                "Experiment ${experiments.size + 1}"
+                            },
                             step = state.step,
                             stability = state.stability,
                             memory = state.memory,
@@ -1094,6 +1371,7 @@ private fun OpenSystemLab(
                             reality = state.reality,
                             inaccessibleRecords = inaccessibleCount(state)
                         )
+
                         saveExperiment(context, record)
                         experiments = loadExperiments(context)
                         experimentName = ""
@@ -1104,83 +1382,40 @@ private fun OpenSystemLab(
                 }
 
                 experiments.takeLast(5).reversed().forEach { record ->
-                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text(record.name, color = Color.White, fontWeight = FontWeight.Bold)
+                    Column {
+                        Text(
+                            record.name,
+                            fontWeight = FontWeight.Bold
+                        )
+
                         Text(
                             "Step ${record.step} | Stability ${percent(record.stability)} | Memory ${percent(record.memory)}",
-                            color = Color.LightGray,
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
-                    Divider(color = Color.DarkGray)
+
+                    HorizontalDivider()
                 }
             }
         }
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = RefreshCard)
-        ) {
+        Card(Modifier.fillMaxWidth()) {
             Column(
-                modifier = Modifier.padding(16.dp),
+                Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("Experiment Log", color = Color.White, fontWeight = FontWeight.Bold)
-                Text("Total Steps: ${state.step}", color = RefreshBlue)
+                Text(
+                    "Experiment Log",
+                    style = MaterialTheme.typography.titleMedium
+                )
+
+                Text("Total Steps: ${state.step}")
 
                 state.log.take(12).forEach {
-                    Text("• $it", color = Color.LightGray)
+                    Text("• $it")
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun MetricCard(
-    title: String,
-    value: Float
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = RefreshCard)
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(title, color = Color.White)
-                Text(percent(value), color = RefreshGreen, fontWeight = FontWeight.Bold)
-            }
-            LinearProgressIndicator(
-                progress = { clamp(value) },
-                modifier = Modifier.fillMaxWidth(),
-                color = RefreshGreen
-            )
-        }
-    }
-}
-
-@Composable
-private fun ValueSlider(
-    title: String,
-    value: Float,
-    onChange: (Float) -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(title, color = Color.White)
-            Text(percent(value), color = RefreshBlue)
-        }
-        Slider(
-            value = value,
-            onValueChange = onChange,
-            valueRange = 0f..1f
-        )
     }
 }
 
@@ -1189,25 +1424,33 @@ private fun ValueSlider(
    --------------------------------------------------------- */
 
 @Composable
-private fun ContinuityLab(
-    onBack: () -> Unit
-) {
+private fun ContinuityLab(onBack: () -> Unit) {
     var originalMemory by remember { mutableFloatStateOf(0.80f) }
     var copyMemory by remember { mutableFloatStateOf(0.80f) }
+
     var originalIdentity by remember { mutableFloatStateOf(0.90f) }
     var copyIdentity by remember { mutableFloatStateOf(0.90f) }
+
     var originalContinuity by remember { mutableFloatStateOf(1f) }
     var copyContinuity by remember { mutableFloatStateOf(0f) }
+
     var transferred by remember { mutableStateOf(false) }
 
     val similarity = clamp(
-        (originalMemory + copyMemory + originalIdentity + copyIdentity) / 4f
+        (
+            originalMemory +
+                copyMemory +
+                originalIdentity +
+                copyIdentity
+            ) / 4f
     )
+
     val originalScore = clamp(
         originalMemory * 0.35f +
             originalIdentity * 0.35f +
             originalContinuity * 0.30f
     )
+
     val copyScore = clamp(
         copyMemory * 0.35f +
             copyIdentity * 0.35f +
@@ -1217,96 +1460,112 @@ private fun ContinuityLab(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(RefreshBackground)
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         TextButton(onClick = onBack) {
-            Text("← वापस", color = RefreshBlue)
+            Text("← वापस")
         }
 
         Text(
             "Existence Continuity & Transfer Lab",
-            color = Color.White,
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold
         )
 
         Text(
-            "Original और Copy के बीच Memory, Identity और Continuity की तुलना करें।",
-            color = Color.LightGray
+            "Original और Copy के बीच Memory, Identity और Continuity की तुलना करें।"
         )
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = RefreshCard)
-        ) {
+        Card(Modifier.fillMaxWidth()) {
             Column(
-                modifier = Modifier.padding(16.dp),
+                Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("Original System", color = RefreshGreen, fontWeight = FontWeight.Bold)
-                ValueSlider(
+                Text(
+                    "Original System",
+                    color = Green,
+                    fontWeight = FontWeight.Bold
+                )
+
+                ParameterSlider(
                     "Original Memory",
                     originalMemory
-                ) { originalMemory = it }
-                ValueSlider(
+                ) {
+                    originalMemory = it
+                }
+
+                ParameterSlider(
                     "Original Identity",
                     originalIdentity
-                ) { originalIdentity = it }
-                ValueSlider(
+                ) {
+                    originalIdentity = it
+                }
+
+                ParameterSlider(
                     "Original Continuity",
                     originalContinuity
-                ) { originalContinuity = it }
+                ) {
+                    originalContinuity = it
+                }
             }
         }
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = RefreshCard)
-        ) {
+        Card(Modifier.fillMaxWidth()) {
             Column(
-                modifier = Modifier.padding(16.dp),
+                Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("Copy / New System", color = RefreshBlue, fontWeight = FontWeight.Bold)
-                ValueSlider(
+                Text(
+                    "Copy / New System",
+                    color = Blue,
+                    fontWeight = FontWeight.Bold
+                )
+
+                ParameterSlider(
                     "Copy Memory",
                     copyMemory
-                ) { copyMemory = it }
-                ValueSlider(
+                ) {
+                    copyMemory = it
+                }
+
+                ParameterSlider(
                     "Copy Identity",
                     copyIdentity
-                ) { copyIdentity = it }
-                ValueSlider(
+                ) {
+                    copyIdentity = it
+                }
+
+                ParameterSlider(
                     "Copy Continuity",
                     copyContinuity
-                ) { copyContinuity = it }
+                ) {
+                    copyContinuity = it
+                }
             }
         }
 
-        MetricCard("Memory & Identity Similarity", similarity)
-        MetricCard("Original Continuity Score", originalScore)
-        MetricCard("Copy Continuity Score", copyScore)
+        ResultMetric("Memory & Identity Similarity", similarity)
+        ResultMetric("Original Continuity Score", originalScore)
+        ResultMetric("Copy Continuity Score", copyScore)
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = RefreshCard)
-        ) {
+        Card(Modifier.fillMaxWidth()) {
             Column(
-                modifier = Modifier.padding(16.dp),
+                Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("Transfer Experiment", color = Color.White, fontWeight = FontWeight.Bold)
+                Text(
+                    "Transfer Experiment",
+                    style = MaterialTheme.typography.titleMedium
+                )
 
                 Text(
                     if (transferred) {
                         "Transfer मॉडल चलाया गया। Original और Copy के मान अलग-अलग देखे जा सकते हैं।"
                     } else {
                         "Transfer शुरू करने पर Copy को Original की Memory और Identity के मान मिलेंगे। Continuity को अलग से नियंत्रित किया जा सकता है।"
-                    },
-                    color = Color.LightGray
+                    }
                 )
 
                 Button(
@@ -1350,28 +1609,98 @@ private fun ContinuityLab(
             }
         }
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = RefreshCard)
-        ) {
+        Card(Modifier.fillMaxWidth()) {
             Column(
-                modifier = Modifier.padding(16.dp),
+                Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("Observation", color = Color.White, fontWeight = FontWeight.Bold)
                 Text(
-                    "Memory और Identity के मान समान हो सकते हैं, जबकि Continuity का मान अलग हो सकता है। इस मॉडल में इन्हें अलग-अलग मापदंडों के रूप में रखा गया है।",
-                    color = Color.LightGray
+                    "Observation",
+                    style = MaterialTheme.typography.titleMedium
                 )
+
                 Text(
-                    "Original Score: ${percent(originalScore)}",
-                    color = RefreshGreen
+                    "Memory और Identity के मान समान हो सकते हैं, जबकि Continuity का मान अलग हो सकता है। इस मॉडल में इन्हें अलग-अलग मापदंडों के रूप में रखा गया है।"
                 )
+
+                Text("Original Score: ${percent(originalScore)}")
+                Text("Copy Score: ${percent(copyScore)}")
+            }
+        }
+    }
+}
+
+/* ---------------------------------------------------------
+   SHARED UI COMPONENTS
+   --------------------------------------------------------- */
+
+@Composable
+private fun ParameterSlider(
+    title: String,
+    value: Float,
+    onChange: (Float) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(title)
+            Text(percent(value), color = Blue)
+        }
+
+        Slider(
+            value = value,
+            onValueChange = onChange,
+            valueRange = 0f..1f
+        )
+    }
+}
+
+@Composable
+private fun ResultMetric(
+    label: String,
+    value: Float
+) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(
+            Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(label)
                 Text(
-                    "Copy Score: ${percent(copyScore)}",
-                    color = RefreshBlue
+                    percent(value),
+                    fontWeight = FontWeight.Bold
                 )
             }
+
+            LinearProgressIndicator(
+                progress = { clamp(value) },
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
+@Composable
+private fun ComparisonLine(
+    label: String,
+    original: Float,
+    copy: Float
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text(label, fontWeight = FontWeight.SemiBold)
+
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("Original: ${percent(original)}")
+            Text("Copy: ${percent(copy)}")
         }
     }
 }
