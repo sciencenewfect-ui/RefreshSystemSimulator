@@ -23,6 +23,11 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
 
+// FIX: Missing color definitions
+private val Green = Color(0xFF66BB6A)
+private val Orange = Color(0xFFFFB74D)
+private val Blue = Color(0xFF42A5F5)
+
 private data class MemoryItem(
     val id: Long,
     val content: String,
@@ -66,7 +71,10 @@ private fun initialSystem(): SystemState = SystemState(
 
 private fun clamp(value: Float): Float = value.coerceIn(0f, 1f)
 
-private fun averageMemory(memories: List<MemoryItem>, fallback: Float): Float {
+private fun averageMemory(
+    memories: List<MemoryItem>,
+    fallback: Float
+): Float {
     if (memories.isEmpty()) return clamp(fallback)
     return clamp(memories.map { it.strength }.average().toFloat())
 }
@@ -74,7 +82,10 @@ private fun averageMemory(memories: List<MemoryItem>, fallback: Float): Float {
 private fun inaccessibleCount(state: SystemState): Int =
     state.memories.count { !it.accessible }
 
-private fun addLog(state: SystemState, message: String): List<String> =
+private fun addLog(
+    state: SystemState,
+    message: String
+): List<String> =
     (listOf(message) + state.log).take(50)
 
 private fun advanceOpenSystem(old: SystemState): SystemState {
@@ -144,10 +155,18 @@ private fun advanceOpenSystem(old: SystemState): SystemState {
     )
 }
 
-private fun saveSystem(context: Context, key: String, state: SystemState) {
-    val prefs = context.getSharedPreferences("refresh_system", Context.MODE_PRIVATE)
+private fun saveSystem(
+    context: Context,
+    key: String,
+    state: SystemState
+) {
+    val prefs = context.getSharedPreferences(
+        "refresh_system",
+        Context.MODE_PRIVATE
+    )
 
     val memories = JSONArray()
+
     state.memories.forEach {
         memories.put(
             JSONObject().apply {
@@ -191,6 +210,7 @@ private fun parseSystem(jsonString: String?): SystemState? {
 
         for (i in 0 until memoriesJson.length()) {
             val item = memoriesJson.optJSONObject(i) ?: continue
+
             memories.add(
                 MemoryItem(
                     id = item.optLong("id"),
@@ -231,13 +251,26 @@ private fun parseSystem(jsonString: String?): SystemState? {
     }
 }
 
-private fun loadSystem(context: Context, key: String): SystemState {
-    val prefs = context.getSharedPreferences("refresh_system", Context.MODE_PRIVATE)
+private fun loadSystem(
+    context: Context,
+    key: String
+): SystemState {
+    val prefs = context.getSharedPreferences(
+        "refresh_system",
+        Context.MODE_PRIVATE
+    )
     return parseSystem(prefs.getString(key, null)) ?: initialSystem()
 }
 
-private fun saveExperiment(context: Context, record: ExperimentRecord) {
-    val prefs = context.getSharedPreferences("refresh_experiments", Context.MODE_PRIVATE)
+private fun saveExperiment(
+    context: Context,
+    record: ExperimentRecord
+) {
+    val prefs = context.getSharedPreferences(
+        "refresh_experiments",
+        Context.MODE_PRIVATE
+    )
+
     val array = JSONArray(prefs.getString("records", "[]"))
 
     array.put(
@@ -257,7 +290,11 @@ private fun saveExperiment(context: Context, record: ExperimentRecord) {
 }
 
 private fun loadExperiments(context: Context): List<ExperimentRecord> {
-    val prefs = context.getSharedPreferences("refresh_experiments", Context.MODE_PRIVATE)
+    val prefs = context.getSharedPreferences(
+        "refresh_experiments",
+        Context.MODE_PRIVATE
+    )
+
     val array = JSONArray(prefs.getString("records", "[]"))
     val records = mutableListOf<ExperimentRecord>()
 
@@ -395,7 +432,7 @@ private fun MainResearchHome(
 }
 
 /* ---------------------------------------------------------
-   UNIFIED OPEN SYSTEM / REFRESH / EVOLUTION SIMULATION
+   OPEN SYSTEM / REFRESH / EVOLUTION SIMULATION
    --------------------------------------------------------- */
 
 private data class FormationAtom(
@@ -471,7 +508,7 @@ private fun nextFormationState(old: FormationState): FormationState {
         .toInt()
         .coerceAtLeast(1)
 
-    // Boundary Exchange: केवल कुछ कण सीमा पार करते हैं।
+    // कुछ कण एक ही समय पर बाहर जाते और नए कण अंदर आते हैं।
     if (stage >= 2 && nextStep % 2 == 0) {
         repeat(exchangeCount.coerceAtMost(FORMATION_SLOTS)) { n ->
             val slot = (nextStep * 3 + n * 7) % FORMATION_SLOTS
@@ -512,7 +549,7 @@ private fun nextFormationState(old: FormationState): FormationState {
         }
     }
 
-    // Internal Refresh: सभी कणों की स्थिति और संबंध बदलते रहते हैं।
+    // पूरे Pattern के अंदर मौजूद सभी कण गति करते हैं।
     val movedAtoms = atoms.map { atom ->
         atom.copy(
             microPhase = atom.microPhase +
@@ -613,8 +650,7 @@ private fun formationPoints(
         x to y
     }
 
-    val environmentBias = environment.coerceIn(0f, 1f)
-    val nextPattern = if (environmentBias < 0.5f) {
+    val nextPattern = if (environment.coerceIn(0f, 1f) < 0.5f) {
         tPattern
     } else {
         bPattern
@@ -628,22 +664,17 @@ private fun formationPoints(
     }
 
     return (0 until FORMATION_SLOTS).map { index ->
-        val base = when {
-            step < 12 -> start[index]
-            else -> w[index]
-        }
-
+        val base = if (step < 12) start[index] else w[index]
         val target = nextPattern[index]
-
         val progress = if (step >= 85) formProgress else 0f
 
-        base.first + (target.first - base.first) * progress to
-            base.second + (target.second - base.second) * progress
+        (base.first + (target.first - base.first) * progress) to
+            (base.second + (target.second - base.second) * progress)
     }
 }
 
 /* ---------------------------------------------------------
-   MAIN SIMULATION SCREEN
+   FORMATION LAB SCREEN
    --------------------------------------------------------- */
 
 @Composable
@@ -659,7 +690,9 @@ private fun OpenSystemFormationLab(
 
     LaunchedEffect(running, simulation.speed) {
         while (running) {
-            delay((650L / simulation.speed.coerceIn(0.4f, 3f)).toLong())
+            delay(
+                (650L / simulation.speed.coerceIn(0.4f, 3f)).toLong()
+            )
             simulation = nextFormationState(simulation)
         }
     }
@@ -691,7 +724,7 @@ private fun OpenSystemFormationLab(
             Spacer(Modifier.weight(1f))
 
             Text(
-                "OPEN SYSTEM LAB",
+                "FORMATION LAB",
                 fontWeight = FontWeight.Bold
             )
         }
@@ -716,7 +749,7 @@ private fun OpenSystemFormationLab(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        "Live Molecular Structure",
+                        "जीवित संरचना का मॉडल",
                         style = MaterialTheme.typography.titleMedium
                     )
 
@@ -742,10 +775,7 @@ private fun OpenSystemFormationLab(
                     FormationLegend(Color(0xFF4ADE80), "अंदर के कण")
                 }
 
-                Text(
-                    simulation.lastEvent,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                Text(simulation.lastEvent)
             }
         }
 
@@ -772,22 +802,14 @@ private fun OpenSystemFormationLab(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             if (active) "●" else "○",
-                            color = if (active) {
-                                Color(0xFF22C55E)
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            }
+                            color = if (active) Green else MaterialTheme.colorScheme.onSurfaceVariant
                         )
 
                         Spacer(Modifier.width(8.dp))
 
                         Text(
                             label,
-                            color = if (active) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
-                            }
+                            color = if (active) Green else MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }
@@ -993,7 +1015,6 @@ private fun FormationCanvas(
             Offset(it.first * sx, it.second * sy)
         }
 
-        // Open System की सीमा
         drawRoundRect(
             color = Color(0xFF64748B).copy(alpha = 0.55f),
             topLeft = Offset(sx * 0.07f, sy * 0.10f),
@@ -1007,7 +1028,6 @@ private fun FormationCanvas(
             style = Stroke(width = 1.dp.toPx())
         )
 
-        // Bonds लगातार बदलते रहते हैं।
         if (stage >= 2) {
             for (i in 0 until centers.lastIndex) {
                 val active = (state.step + i) % 6 != 0
@@ -1020,11 +1040,7 @@ private fun FormationCanvas(
                     },
                     start = centers[i],
                     end = centers[i + 1],
-                    strokeWidth = if (active) {
-                        2.2.dp.toPx()
-                    } else {
-                        1.dp.toPx()
-                    }
+                    strokeWidth = if (active) 2.2.dp.toPx() else 1.dp.toPx()
                 )
             }
 
@@ -1042,14 +1058,13 @@ private fun FormationCanvas(
             }
         }
 
-        // सभी अंदरूनी कणों की गति।
         state.atoms.forEach { atom ->
             val target = centers[atom.slot]
             val phase = atom.microPhase + state.step * 0.12f
 
             val movement = state.internalMovement *
                 (1.2f + (atom.slot % 4) * 0.35f) *
-                dpScale(this)
+                density
 
             val x = target.x +
                 kotlin.math.sin(phase.toDouble()).toFloat() * movement
@@ -1066,13 +1081,12 @@ private fun FormationCanvas(
             )
 
             drawCircle(
-                Color(0xFF4ADE80),
+                Green,
                 4.dp.toPx(),
                 point
             )
         }
 
-        // Entry और Exit एक साथ दिखते हैं।
         state.boundaryParticles.forEach { particle ->
             val target = centers[particle.slot]
             val p = particle.progress.coerceIn(0f, 1f)
@@ -1100,11 +1114,7 @@ private fun FormationCanvas(
                 start.y + (end.y - start.y) * p
             )
 
-            val color = if (particle.entering) {
-                Color(0xFF38BDF8)
-            } else {
-                Color(0xFFF59E0B)
-            }
+            val color = if (particle.entering) Blue else Orange
 
             drawCircle(
                 color.copy(alpha = 0.20f),
@@ -1119,7 +1129,6 @@ private fun FormationCanvas(
             )
         }
 
-        // शुरुआत में बिखरे हुए कण।
         if (stage == 1) {
             for (i in 0 until 12) {
                 val x = sx * (0.12f + ((i * 23) % 75) / 100f)
@@ -1134,10 +1143,6 @@ private fun FormationCanvas(
         }
     }
 }
-
-private fun dpScale(
-    scope: androidx.compose.ui.graphics.drawscope.DrawScope
-): Float = scope.density * 1.0f
 
 /* ---------------------------------------------------------
    ADVANCED OPEN SYSTEM LAB
@@ -1205,38 +1210,23 @@ private fun OpenSystemLab(onBack: () -> Unit) {
                     style = MaterialTheme.typography.titleMedium
                 )
 
-                ParameterSlider(
-                    "Material Exchange",
-                    state.exchange
-                ) {
+                ParameterSlider("Material Exchange", state.exchange) {
                     state = state.copy(exchange = it)
                 }
 
-                ParameterSlider(
-                    "Refresh Rate",
-                    state.refresh
-                ) {
+                ParameterSlider("Refresh Rate", state.refresh) {
                     state = state.copy(refresh = it)
                 }
 
-                ParameterSlider(
-                    "Memory Retention",
-                    state.retention
-                ) {
+                ParameterSlider("Memory Retention", state.retention) {
                     state = state.copy(retention = it)
                 }
 
-                ParameterSlider(
-                    "Activity",
-                    state.activity
-                ) {
+                ParameterSlider("Activity", state.activity) {
                     state = state.copy(activity = it)
                 }
 
-                ParameterSlider(
-                    "Disturbance",
-                    state.disturbance
-                ) {
+                ParameterSlider("Disturbance", state.disturbance) {
                     state = state.copy(disturbance = it)
                 }
             }
@@ -1292,10 +1282,12 @@ private fun OpenSystemLab(onBack: () -> Unit) {
                 state.memories.takeLast(8).forEach { item ->
                     Column {
                         Text(item.content)
+
                         Text(
                             "Strength: ${percent(item.strength)} | Age: ${item.age}",
                             style = MaterialTheme.typography.bodySmall
                         )
+
                         Text(
                             if (item.accessible) "Available" else "Weak",
                             color = if (item.accessible) Green else Orange
@@ -1489,24 +1481,15 @@ private fun ContinuityLab(onBack: () -> Unit) {
                     fontWeight = FontWeight.Bold
                 )
 
-                ParameterSlider(
-                    "Original Memory",
-                    originalMemory
-                ) {
+                ParameterSlider("Original Memory", originalMemory) {
                     originalMemory = it
                 }
 
-                ParameterSlider(
-                    "Original Identity",
-                    originalIdentity
-                ) {
+                ParameterSlider("Original Identity", originalIdentity) {
                     originalIdentity = it
                 }
 
-                ParameterSlider(
-                    "Original Continuity",
-                    originalContinuity
-                ) {
+                ParameterSlider("Original Continuity", originalContinuity) {
                     originalContinuity = it
                 }
             }
@@ -1523,24 +1506,15 @@ private fun ContinuityLab(onBack: () -> Unit) {
                     fontWeight = FontWeight.Bold
                 )
 
-                ParameterSlider(
-                    "Copy Memory",
-                    copyMemory
-                ) {
+                ParameterSlider("Copy Memory", copyMemory) {
                     copyMemory = it
                 }
 
-                ParameterSlider(
-                    "Copy Identity",
-                    copyIdentity
-                ) {
+                ParameterSlider("Copy Identity", copyIdentity) {
                     copyIdentity = it
                 }
 
-                ParameterSlider(
-                    "Copy Continuity",
-                    copyContinuity
-                ) {
+                ParameterSlider("Copy Continuity", copyContinuity) {
                     copyContinuity = it
                 }
             }
@@ -1672,6 +1646,7 @@ private fun ResultMetric(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(label)
+
                 Text(
                     percent(value),
                     fontWeight = FontWeight.Bold
