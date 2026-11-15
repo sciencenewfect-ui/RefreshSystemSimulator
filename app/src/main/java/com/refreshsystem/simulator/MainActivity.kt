@@ -69,30 +69,78 @@ class MainActivity : ComponentActivity() {
 }
 
 /*
- * Main Research Home Screen.
- * 3D Human Open System model is shown above the five research departments.
+ * Main App Navigation
+ * Tab 1: 3D Human Open System
+ * Tab 2: Existing Research Labs
+ *
+ * ResearchHomeScreen() is preserved without modification.
  */
 @Composable
 private fun RefreshTheoryApp() {
+    var selectedTab by remember { mutableIntStateOf(0) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Ink)
-            .verticalScroll(rememberScrollState())
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        HumanOpenSystem3DPanel()
+        TabRow(
+            selectedTabIndex = selectedTab,
+            containerColor = Panel,
+            contentColor = Cyan
+        ) {
+            Tab(
+                selected = selectedTab == 0,
+                onClick = { selectedTab = 0 },
+                text = {
+                    Text(
+                        text = "3D Human System",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            )
 
-        ResearchHomeScreen()
+            Tab(
+                selected = selectedTab == 1,
+                onClick = { selectedTab = 1 },
+                text = {
+                    Text(
+                        text = "Research Labs",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+        ) {
+            when (selectedTab) {
+                0 -> {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(12.dp)
+                    ) {
+                        HumanOpenSystem3DPanel()
+                    }
+                }
+
+                1 -> {
+                    ResearchHomeScreen()
+                }
+            }
+        }
     }
 }
 
 /*
- * Phase 2: 3D Human Open System Model.
- * This is a conceptual visual model.
- * Camera and microphone are currently shown as inactive until connected
- * to the live input pipeline.
+ * 3D Human Open System Model
+ * Conceptual visual model.
+ * Camera and microphone are not yet connected to this 3D model.
  */
 @Composable
 private fun HumanOpenSystem3DPanel() {
@@ -155,13 +203,13 @@ private fun HumanOpenSystem3DPanel() {
             )
 
             Text(
-                text = "3D model: VISUAL MODE",
+                text = "3D MODEL: VISUAL MODE",
                 color = Cyan,
                 fontWeight = FontWeight.Bold
             )
 
             Text(
-                text = "Drag the model to rotate it. Live camera and microphone integration will be connected in the next development step.",
+                text = "Drag the model to rotate it. Live camera and microphone integration will be developed in the next phase.",
                 color = Muted,
                 style = MaterialTheme.typography.bodySmall
             )
@@ -170,8 +218,8 @@ private fun HumanOpenSystem3DPanel() {
 }
 
 /*
- * Old ExperimentScreen preserved.
- * It is not part of the main navigation currently.
+ * Existing ExperimentScreen preserved.
+ * Not currently part of the main navigation.
  */
 @Composable
 private fun ExperimentScreen() {
@@ -278,7 +326,7 @@ private fun ExperimentScreen() {
 }
 
 /*
- * Old LearnScreen preserved.
+ * Existing LearnScreen preserved.
  */
 @Composable
 private fun LearnScreen() {
@@ -336,7 +384,7 @@ private fun LearnScreen() {
 
 /*
  * RobotWorld.kt uses this CameraPanel.
- * Keep it public (not private).
+ * Keep it public.
  */
 @Composable
 fun CameraPanel(
