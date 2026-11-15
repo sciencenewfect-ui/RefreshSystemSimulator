@@ -69,18 +69,109 @@ class MainActivity : ComponentActivity() {
 }
 
 /*
- * नया मुख्य Research Lab Home Screen.
- * पाँचों departments ResearchLabScreen.kt से खुलेंगे।
- * पुराने Robot, Experiment और Learn tabs अब मुख्य स्क्रीन पर नहीं दिखेंगे।
+ * Main Research Home Screen.
+ * 3D Human Open System model is shown above the five research departments.
  */
 @Composable
 private fun RefreshTheoryApp() {
-    ResearchHomeScreen()
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Ink)
+            .verticalScroll(rememberScrollState())
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        HumanOpenSystem3DPanel()
+
+        ResearchHomeScreen()
+    }
 }
 
 /*
- * पुराना ExperimentScreen सुरक्षित रखा गया है।
- * इसे मुख्य navigation से हटाया गया है, code delete नहीं किया गया।
+ * Phase 2: 3D Human Open System Model.
+ * This is a conceptual visual model.
+ * Camera and microphone are currently shown as inactive until connected
+ * to the live input pipeline.
+ */
+@Composable
+private fun HumanOpenSystem3DPanel() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = Panel
+        ),
+        shape = RoundedCornerShape(22.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "PHASE 2",
+                color = Cyan,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold
+            )
+
+            Text(
+                text = "3D HUMAN OPEN SYSTEM",
+                color = Color.White,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Black
+            )
+
+            Text(
+                text = "Refresh • Information Exchange • Dynamic Stability • Memory",
+                color = Muted,
+                style = MaterialTheme.typography.bodySmall
+            )
+
+            AndroidView(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(430.dp),
+                factory = { context ->
+                    HumanOpenSystem3DView(context).apply {
+                        updateSignals(
+                            camera = false,
+                            microphone = false,
+                            audio = 0f,
+                            stability = 0.65f
+                        )
+                    }
+                },
+                update = { view ->
+                    view.updateSignals(
+                        camera = false,
+                        microphone = false,
+                        audio = 0f,
+                        stability = 0.65f
+                    )
+                }
+            )
+
+            Text(
+                text = "3D model: VISUAL MODE",
+                color = Cyan,
+                fontWeight = FontWeight.Bold
+            )
+
+            Text(
+                text = "Drag the model to rotate it. Live camera and microphone integration will be connected in the next development step.",
+                color = Muted,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
+}
+
+/*
+ * Old ExperimentScreen preserved.
+ * It is not part of the main navigation currently.
  */
 @Composable
 private fun ExperimentScreen() {
@@ -187,8 +278,7 @@ private fun ExperimentScreen() {
 }
 
 /*
- * पुराना LearnScreen सुरक्षित रखा गया है।
- * अब यह मुख्य navigation में नहीं दिखेगा।
+ * Old LearnScreen preserved.
  */
 @Composable
 private fun LearnScreen() {
@@ -245,8 +335,8 @@ private fun LearnScreen() {
 }
 
 /*
- * RobotWorld.kt इसी CameraPanel को call करता है।
- * इसलिए इस function के आगे private नहीं लगाना है।
+ * RobotWorld.kt uses this CameraPanel.
+ * Keep it public (not private).
  */
 @Composable
 fun CameraPanel(
