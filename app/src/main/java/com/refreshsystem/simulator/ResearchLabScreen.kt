@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import java.util.Locale
 import kotlin.math.*
 import kotlin.random.Random
 
@@ -66,7 +67,6 @@ private data class ResearchState(
     val connectionRange: Float = 0.16f,
 
     val speed: Float = 1f,
-    val running: Boolean = true,
 
     val totalIn: Int = 0,
     val totalOut: Int = 0,
@@ -109,7 +109,12 @@ private fun initialResearchState(): ResearchState {
         )
     }
 
-    return ResearchState(particles = particles)
+    val bonds = calculateBonds(particles, 0.16f)
+
+    return ResearchState(
+        particles = particles,
+        bonds = bonds
+    )
 }
 
 /* ---------------------------------------------------------
@@ -197,9 +202,7 @@ private fun nextResearchState(
     var totalIn = old.totalIn
     var totalOut = old.totalOut
 
-    // -----------------------------------------------------
     // 1. EXTERNAL INPUT
-    // -----------------------------------------------------
 
     val inputAmount = (
         old.inputRate * 4f +
@@ -241,16 +244,12 @@ private fun nextResearchState(
         }
     }
 
-    // -----------------------------------------------------
     // 2. LOCAL INTERACTIONS
-    // Particles respond to nearby particles.
-    // -----------------------------------------------------
 
     val moved = particles.map { particle ->
 
         var forceX = 0f
         var forceY = 0f
-        var neighborCount = 0
 
         particles.forEach { other ->
 
@@ -261,8 +260,6 @@ private fun nextResearchState(
                 val d = sqrt(dx * dx + dy * dy)
 
                 if (d > 0.0001f && d < old.connectionRange * 1.8f) {
-
-                    neighborCount++
 
                     val nx = dx / d
                     val ny = dy / d
@@ -328,9 +325,7 @@ private fun nextResearchState(
         )
     }
 
-    // -----------------------------------------------------
     // 3. EXTERNAL OUTPUT
-    // -----------------------------------------------------
 
     val outputAmount = (
         old.outputRate * 4f +
@@ -350,9 +345,7 @@ private fun nextResearchState(
         }
     }
 
-    // -----------------------------------------------------
-    // 4. NEW CONNECTIONS AND BROKEN CONNECTIONS
-    // -----------------------------------------------------
+    // 4. CONNECTIONS
 
     val newBonds = calculateBonds(
         finalParticles,
@@ -370,9 +363,7 @@ private fun nextResearchState(
     val formed = newBondKeys.subtract(oldBondKeys).size
     val broken = oldBondKeys.subtract(newBondKeys).size
 
-    // -----------------------------------------------------
     // 5. DYNAMIC STABILITY AND PATTERN DRIFT
-    // -----------------------------------------------------
 
     val similarity = bondSimilarity(oldBonds, newBonds)
 
@@ -386,9 +377,7 @@ private fun nextResearchState(
             (1f - drift * 3f) * 0.35f
     )
 
-    // -----------------------------------------------------
-    // 6. SNAPSHOT
-    // -----------------------------------------------------
+    // 6. SNAPSHOTS
 
     var snapshots = old.snapshots
 
@@ -504,9 +493,7 @@ private fun MicrostructureResearchLab() {
             "स्थानीय कणों और उनके Connections में लगातार बदलाव से Pattern का उभरना, Refresh होना और समय के साथ विकसित होना।"
         )
 
-        // -------------------------------------------------
         // SIMULATION
-        // -------------------------------------------------
 
         Card(Modifier.fillMaxWidth()) {
 
@@ -547,9 +534,7 @@ private fun MicrostructureResearchLab() {
             }
         }
 
-        // -------------------------------------------------
         // DYNAMIC STABILITY
-        // -------------------------------------------------
 
         Card(Modifier.fillMaxWidth()) {
 
@@ -589,9 +574,7 @@ private fun MicrostructureResearchLab() {
             }
         }
 
-        // -------------------------------------------------
         // LIVE STRUCTURE
-        // -------------------------------------------------
 
         Card(Modifier.fillMaxWidth()) {
 
@@ -621,9 +604,7 @@ private fun MicrostructureResearchLab() {
             }
         }
 
-        // -------------------------------------------------
         // SNAPSHOTS AND EVOLUTION
-        // -------------------------------------------------
 
         Card(Modifier.fillMaxWidth()) {
 
@@ -655,9 +636,7 @@ private fun MicrostructureResearchLab() {
             }
         }
 
-        // -------------------------------------------------
         // CONTROLS
-        // -------------------------------------------------
 
         Card(Modifier.fillMaxWidth()) {
 
@@ -793,9 +772,7 @@ private fun MicrostructureResearchLab() {
             }
         }
 
-        // -------------------------------------------------
         // EXPERIMENT GUIDE
-        // -------------------------------------------------
 
         Card(Modifier.fillMaxWidth()) {
 
@@ -854,7 +831,9 @@ private fun LegendDot(
         Canvas(Modifier.size(9.dp)) {
             drawCircle(color)
         }
+
         Spacer(Modifier.width(4.dp))
+
         Text(
             label,
             style = MaterialTheme.typography.labelSmall
@@ -887,6 +866,7 @@ private fun MicrostructureCanvas(
         val bottom = sy * 0.95f
 
         // Open System boundary
+
         drawRoundRect(
             color = Violet.copy(alpha = 0.70f),
             topLeft = Offset(left, top),
@@ -904,6 +884,7 @@ private fun MicrostructureCanvas(
             state.particles.associateBy { it.id }
 
         // Draw current connections
+
         state.bonds.forEach { bond ->
 
             val a = particleMap[bond.a]
@@ -921,6 +902,7 @@ private fun MicrostructureCanvas(
         }
 
         // Draw particles
+
         state.particles.forEach { particle ->
 
             val point = Offset(
@@ -948,6 +930,7 @@ private fun MicrostructureCanvas(
         }
 
         // Input / output visual indicators
+
         drawCircle(
             Blue.copy(alpha = 0.85f),
             5.dp.toPx(),
