@@ -23,13 +23,24 @@ import java.util.Locale
 import kotlin.math.*
 import kotlin.random.Random
 
+/* =========================================================
+   REFRESH SYSTEM THEME
+   ========================================================= */
+
 private val RTGreen = Color(0xFF66BB6A)
 private val RTBlue = Color(0xFF42A5F5)
 private val RTOrange = Color(0xFFFFB74D)
 private val RTViolet = Color(0xFF9C8CFF)
 private val RTCyan = Color(0xFF38BDF8)
-private val RTDark = Color(0xFF0B1220)
 private val RTPurple = Color(0xFFBA8CFF)
+
+private val RTBackground = Color(0xFF0B1020)
+private val RTSurface = Color(0xFF171F32)
+private val RTSurface2 = Color(0xFF202B40)
+private val RTText = Color(0xFFF4F6FC)
+private val RTSubText = Color(0xFFADB8CC)
+private val RTAccent = Color(0xFFFF526B)
+private val RTBorder = Color(0xFF34415A)
 
 private fun Float.fmt(digits: Int = 2): String =
     String.format(Locale.US, "%.${digits}f", this)
@@ -52,31 +63,23 @@ private data class MainPoint(
 
 private data class MainResearchState(
     val cycle: Int = 0,
-
     val input: Float = 0.60f,
     val output: Float = 0.35f,
     val refreshRate: Float = 0.65f,
-
     val refreshEnabled: Boolean = true,
     val memoryEnabled: Boolean = true,
-
     val recordingRate: Float = 0.50f,
     val retentionRate: Float = 0.90f,
     val retrievalRate: Float = 0.60f,
-
     val systemActivity: Float = 1f,
     val dynamicStability: Float = 0f,
-
     val memoryValue: Float = 0f,
     val recording: Float = 0f,
     val retrieval: Float = 0f,
-
     val informationInput: Float = 0f,
     val informationLost: Float = 0f,
-
     val continuity: Float = 1f,
     val totalRefresh: Int = 0,
-
     val history: List<MainPoint> = emptyList()
 )
 
@@ -91,8 +94,6 @@ private fun initialMainState(): MainResearchState {
 
 /* =========================================================
    MAIN MATHEMATICAL MODEL
-
-   These are proposed simulator equations.
    ========================================================= */
 
 private fun nextMainState(
@@ -102,17 +103,9 @@ private fun nextMainState(
     val dt = 1f
 
     val refreshActivity =
-        if (old.refreshEnabled) {
-            old.refreshRate
-        } else {
-            0f
-        }
-
-    // External exchange
+        if (old.refreshEnabled) old.refreshRate else 0f
 
     val exchange = old.input - old.output
-
-    // System activity changes through exchange and refresh.
 
     val activityChange =
         exchange * 0.08f +
@@ -121,14 +114,9 @@ private fun nextMainState(
 
     val activity = (
         old.systemActivity + activityChange * dt
-        ).safe01()
+    ).safe01()
 
-    // Refresh activity
-
-    val refreshValue =
-        refreshActivity * activity
-
-    // Memory recording
+    val refreshValue = refreshActivity * activity
 
     val newInformation =
         if (old.memoryEnabled) {
@@ -147,41 +135,35 @@ private fun nextMainState(
     val memory = (
         retainedMemory +
             newInformation * refreshValue * 0.12f
-        ).safe01()
-
-    // Information recording
+    ).safe01()
 
     val recording = (
         old.recording * 0.92f +
             newInformation * refreshValue * 0.08f
-        ).safe01()
-
-    // Retrieval
+    ).safe01()
 
     val retrieval = if (old.memoryEnabled) {
         (
             memory *
                 old.retrievalRate *
                 (0.5f + refreshValue * 0.5f)
-            ).safe01()
+        ).safe01()
     } else {
         0f
     }
 
-    // Dynamic Stability
-
     val exchangeBalance = (
         1f - abs(old.input - old.output)
-        ).safe01()
+    ).safe01()
 
     val activityContinuity = (
         1f - abs(activity - old.systemActivity)
-        ).safe01()
+    ).safe01()
 
     val memoryContinuity = if (old.memoryEnabled) {
         (
             1f - abs(memory - old.memoryValue)
-            ).safe01()
+        ).safe01()
     } else {
         0f
     }
@@ -191,18 +173,16 @@ private fun nextMainState(
             activityContinuity * 0.25f +
             refreshValue * 0.30f +
             memoryContinuity * 0.20f
-        ).safe01()
-
-    // Continuity
+    ).safe01()
 
     val continuity = (
         old.continuity * 0.70f +
             dynamicStability * 0.30f
-        ).safe01()
+    ).safe01()
 
     val lost = (
         old.memoryValue - memory
-        ).coerceAtLeast(0f)
+    ).coerceAtLeast(0f)
 
     val nextCycle = old.cycle + 1
 
@@ -259,22 +239,18 @@ private data class MicroState(
     val cycle: Int = 0,
     val particles: List<MicroParticle> = emptyList(),
     val bonds: List<MicroBond> = emptyList(),
-
     val inputRate: Float = 0.15f,
     val outputRate: Float = 0.08f,
     val refreshRate: Float = 0.45f,
     val attraction: Float = 0.40f,
     val repulsion: Float = 0.55f,
     val connectionRange: Float = 0.12f,
-
     val totalInput: Int = 0,
     val totalOutput: Int = 0,
     val formed: Int = 0,
     val broken: Int = 0,
-
     val continuity: Float = 1f,
     val drift: Float = 0f,
-
     val snapshots: List<MicroSnapshot> = emptyList()
 )
 
@@ -303,7 +279,6 @@ private fun calculateMicroBonds(
     val keys = mutableSetOf<String>()
 
     particles.forEach { p ->
-
         particles
             .asSequence()
             .filter { it.id != p.id }
@@ -312,10 +287,8 @@ private fun calculateMicroBonds(
             .sortedBy { it.second }
             .take(MICRO_NEIGHBORS)
             .forEach { (other, _) ->
-
                 val a = minOf(p.id, other.id)
                 val b = maxOf(p.id, other.id)
-
                 keys.add("$a-$b")
             }
     }
@@ -325,11 +298,7 @@ private fun calculateMicroBonds(
         val a = parts.getOrNull(0)?.toIntOrNull()
         val b = parts.getOrNull(1)?.toIntOrNull()
 
-        if (a != null && b != null) {
-            MicroBond(a, b)
-        } else {
-            null
-        }
+        if (a != null && b != null) MicroBond(a, b) else null
     }
 }
 
@@ -344,11 +313,9 @@ private fun microAverage(
 }
 
 private fun initialMicroState(): MicroState {
-
     val random = Random(73)
 
     val particles = (0 until 65).map { i ->
-
         MicroParticle(
             id = i + 1,
             x = 0.10f + random.nextFloat() * 0.80f,
@@ -374,7 +341,6 @@ private fun nextMicroState(
 ): MicroState {
 
     val random = Random(old.cycle * 7919 + 31)
-
     val particles = old.particles.toMutableList()
 
     var totalInput = old.totalInput
@@ -383,12 +349,10 @@ private fun nextMicroState(
     val inputCount = (
         old.inputRate * 3f +
             if (random.nextFloat() < old.inputRate) 1f else 0f
-        ).toInt().coerceIn(0, 4)
+    ).toInt().coerceIn(0, 4)
 
     repeat(inputCount) {
-
         if (particles.size < MICRO_MAX) {
-
             val side = random.nextInt(4)
 
             val x = when (side) {
@@ -405,7 +369,7 @@ private fun nextMicroState(
 
             val id = (
                 particles.maxOfOrNull { it.id } ?: 0
-                ) + 1
+            ) + 1
 
             particles.add(
                 MicroParticle(
@@ -423,45 +387,36 @@ private fun nextMicroState(
     }
 
     val moved = particles.map { p ->
-
         var fx = 0f
         var fy = 0f
         var neighbors = 0
 
         particles.forEach { other ->
-
             if (p.id != other.id) {
-
                 val dx = other.x - p.x
                 val dy = other.y - p.y
-
                 val d = sqrt(dx * dx + dy * dy)
 
                 if (d > 0.0001f &&
                     d < old.connectionRange * 1.8f
                 ) {
-
                     val nx = dx / d
                     val ny = dy / d
-
                     val preferred = 0.075f
 
                     if (d < preferred) {
-
                         val push = (
                             (preferred - d) *
                                 old.repulsion * 0.018f
-                            ).coerceAtMost(0.002f)
+                        ).coerceAtMost(0.002f)
 
                         fx -= nx * push
                         fy -= ny * push
-
                     } else {
-
                         val pull = (
                             (d - preferred) *
                                 old.attraction * 0.004f
-                            ).coerceAtMost(0.0015f)
+                        ).coerceAtMost(0.0015f)
 
                         fx += nx * pull
                         fy += ny * pull
@@ -483,13 +438,13 @@ private fun nextMicroState(
             p.vx * 0.88f +
                 fx +
                 (random.nextFloat() - 0.5f) * noise
-            ).coerceIn(-0.004f, 0.004f)
+        ).coerceIn(-0.004f, 0.004f)
 
         val vy = (
             p.vy * 0.88f +
                 fy +
                 (random.nextFloat() - 0.5f) * noise
-            ).coerceIn(-0.004f, 0.004f)
+        ).coerceIn(-0.004f, 0.004f)
 
         p.copy(
             x = (p.x + vx).coerceIn(0.035f, 0.965f),
@@ -503,18 +458,15 @@ private fun nextMicroState(
     val outputCount = (
         old.outputRate * 3f +
             if (random.nextFloat() < old.outputRate) 1f else 0f
-        ).toInt().coerceIn(0, 4)
+    ).toInt().coerceIn(0, 4)
 
     val finalParticles = moved.toMutableList()
 
     repeat(outputCount) {
-
         if (finalParticles.size > MICRO_MIN) {
-
             finalParticles.removeAt(
                 random.nextInt(finalParticles.size)
             )
-
             totalOutput++
         }
     }
@@ -547,14 +499,13 @@ private fun nextMicroState(
     val continuity = (
         similarity * 0.70f +
             (1f - drift * 3f).safe01() * 0.30f
-        ).safe01()
+    ).safe01()
 
     val nextCycle = old.cycle + 1
 
     var snapshots = old.snapshots
 
     if (nextCycle % 30 == 0) {
-
         snapshots = (
             snapshots + MicroSnapshot(
                 nextCycle,
@@ -579,61 +530,116 @@ private fun nextMicroState(
 }
 
 /* =========================================================
-   MAIN ENTRY POINT
+   MAIN SCREEN
    ========================================================= */
 
 @Composable
 fun ResearchHomeScreen() {
 
-    var selectedLab by remember {
-        mutableStateOf(0)
-    }
+    var selectedLab by remember { mutableStateOf(0) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(RTBackground)
     ) {
-
         Column(
-            modifier = Modifier.padding(
-                horizontal = 16.dp,
-                vertical = 12.dp
-            )
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(RTBackground)
+                .padding(horizontal = 20.dp, vertical = 18.dp)
         ) {
-
             Text(
                 "Refresh System",
+                color = RTText,
                 style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.ExtraBold
             )
+
+            Spacer(Modifier.height(5.dp))
 
             Text(
                 "Research & Development",
-                style = MaterialTheme.typography.bodyMedium
+                color = RTSubText,
+                style = MaterialTheme.typography.bodyLarge
             )
         }
 
-        TabRow(selectedTabIndex = selectedLab) {
-
+        TabRow(
+            selectedTabIndex = selectedLab,
+            containerColor = RTSurface,
+            contentColor = RTAccent
+        ) {
             Tab(
                 selected = selectedLab == 0,
                 onClick = { selectedLab = 0 },
-                text = { Text("Main Research") }
+                text = {
+                    Text(
+                        "Main Research",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             )
 
             Tab(
                 selected = selectedLab == 1,
                 onClick = { selectedLab = 1 },
-                text = { Text("Microstructure") }
+                text = {
+                    Text(
+                        "Microstructure",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             )
         }
 
-        when (selectedLab) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(RTBackground)
+        ) {
+            if (selectedLab == 0) {
+                MainRefreshResearchLab()
+            } else {
+                MicrostructureLab()
+            }
+        }
+    }
+}
 
-            0 -> MainRefreshResearchLab()
+/* =========================================================
+   REUSABLE RESEARCH CARD
+   ========================================================= */
 
-            1 -> MicrostructureLab()
+@Composable
+private fun ResearchCard(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = RTSurface
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 2.dp
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                title,
+                color = RTText,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+
+            content()
         }
     }
 }
@@ -658,12 +664,37 @@ private fun MainRefreshResearchLab() {
     }
 
     LaunchedEffect(running) {
-
         while (running) {
-
             delay(700L)
-
             state = nextMainState(state)
+        }
+    }
+
+    fun selectExperiment(item: String) {
+        experiment = item
+
+        val base = initialMainState()
+
+        state = when (item) {
+            "A" -> base.copy(
+                refreshEnabled = false,
+                memoryEnabled = false
+            )
+
+            "B" -> base.copy(
+                refreshEnabled = true,
+                memoryEnabled = false
+            )
+
+            "C" -> base.copy(
+                refreshEnabled = false,
+                memoryEnabled = true
+            )
+
+            else -> base.copy(
+                refreshEnabled = true,
+                memoryEnabled = true
+            )
         }
     }
 
@@ -671,413 +702,375 @@ private fun MainRefreshResearchLab() {
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(horizontal = 16.dp, vertical = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
 
-        Text(
-            "Refresh Theory Research Lab",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold
-        )
+        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text(
+                "Dynamic Stability + Memory",
+                color = RTText,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.ExtraBold
+            )
 
-        Text(
-            "Open System • Continuous Refresh • Dynamic Stability • Memory"
-        )
-
-        // SYSTEM FLOW
-
-        Card(Modifier.fillMaxWidth()) {
-
-            Column(
-                Modifier.padding(14.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-
-                Text(
-                    "OPEN SYSTEM",
-                    fontWeight = FontWeight.Bold
-                )
-
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-
-                    FlowBox("INPUT", RTBlue)
-                    FlowBox("REFRESH", RTGreen)
-                    FlowBox("OUTPUT", RTOrange)
-                }
-
-                IconArrow()
-
-                FlowBox(
-                    "DYNAMIC STABILITY",
-                    RTViolet
-                )
-
-                IconArrow()
-
-                FlowBox(
-                    "RECORDING & MEMORY",
-                    RTPurple
-                )
-
-                IconArrow()
-
-                FlowBox(
-                    "CHETNA RESEARCH",
-                    RTOrange
-                )
-            }
+            Text(
+                "Open System • Continuous Refresh • Chetna Research",
+                color = RTSubText,
+                style = MaterialTheme.typography.bodyMedium
+            )
         }
 
-        // EXPERIMENT SELECTION
+        /* OPEN SYSTEM FLOW */
 
-        Card(Modifier.fillMaxWidth()) {
+        ResearchCard("OPEN SYSTEM") {
 
-            Column(
-                Modifier.padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-
-                Text(
-                    "Controlled Experiments",
-                    fontWeight = FontWeight.Bold
+                FlowBox(
+                    "INPUT",
+                    RTBlue,
+                    Modifier.weight(1f)
                 )
 
-                Text("A: Refresh OFF, Memory OFF")
-                Text("B: Refresh ON, Memory OFF")
-                Text("C: Refresh OFF, Memory ON")
-                Text("D: Refresh ON, Memory ON")
+                FlowBox(
+                    "REFRESH",
+                    RTGreen,
+                    Modifier.weight(1f)
+                )
 
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(5.dp)
-                ) {
+                FlowBox(
+                    "OUTPUT",
+                    RTOrange,
+                    Modifier.weight(1f)
+                )
+            }
 
-                    listOf("A", "B", "C", "D").forEach { item ->
+            ProcessArrow()
 
-                        FilterChip(
-                            selected = experiment == item,
-                            onClick = {
-                                experiment = item
+            ProcessBox(
+                "DYNAMIC STABILITY",
+                RTViolet,
+                "Continuous system activity"
+            )
 
-                                state = initialMainState()
+            ProcessArrow()
 
-                                state = when (item) {
-                                    "A" -> state.copy(
-                                        refreshEnabled = false,
-                                        memoryEnabled = false
-                                    )
+            ProcessBox(
+                "RECORDING & MEMORY",
+                RTPurple,
+                "Information recording and retention"
+            )
 
-                                    "B" -> state.copy(
-                                        refreshEnabled = true,
-                                        memoryEnabled = false
-                                    )
+            ProcessArrow()
 
-                                    "C" -> state.copy(
-                                        refreshEnabled = false,
-                                        memoryEnabled = true
-                                    )
+            ProcessBox(
+                "CHETNA RESEARCH",
+                RTOrange,
+                "Research into experience and awareness"
+            )
+        }
 
-                                    else -> state.copy(
-                                        refreshEnabled = true,
-                                        memoryEnabled = true
-                                    )
-                                }
-                            },
-                            label = { Text(item) }
+        /* CONTROLLED EXPERIMENTS */
+
+        ResearchCard("CONTROLLED EXPERIMENTS") {
+
+            Text(
+                "Refresh और Memory के प्रभावों की तुलना करें।",
+                color = RTSubText
+            )
+
+            val descriptions = listOf(
+                "Refresh OFF • Memory OFF",
+                "Refresh ON • Memory OFF",
+                "Refresh OFF • Memory ON",
+                "Refresh ON • Memory ON"
+            )
+
+            descriptions.forEachIndexed { index, description ->
+
+                val key = listOf("A", "B", "C", "D")[index]
+                val selected = experiment == key
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { selectExperiment(key) },
+                    shape = RoundedCornerShape(14.dp),
+                    color = if (selected) {
+                        RTAccent.copy(alpha = 0.15f)
+                    } else {
+                        RTSurface2
+                    },
+                    border = if (selected) {
+                        androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            RTAccent
+                        )
+                    } else {
+                        androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            RTBorder
                         )
                     }
-                }
-
-                Text(
-                    "Selected Experiment: $experiment",
-                    fontWeight = FontWeight.Bold
-                )
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-
-                    Button(
-                        onClick = {
-                            running = !running
-                        },
-                        modifier = Modifier.weight(1f)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            if (running) "Pause" else "Resume"
+                            key,
+                            color = if (selected) RTAccent else RTText,
+                            fontWeight = FontWeight.ExtraBold,
+                            style = MaterialTheme.typography.titleLarge
                         )
-                    }
 
-                    OutlinedButton(
-                        onClick = {
-                            running = false
-                            state = initialMainState()
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Reset")
+                        Spacer(Modifier.width(14.dp))
+
+                        Text(
+                            description,
+                            color = RTText,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        if (selected) {
+                            Text(
+                                "SELECTED",
+                                color = RTAccent,
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
                     }
+                }
+            }
+
+            Text(
+                "Active Experiment: $experiment",
+                color = RTAccent,
+                fontWeight = FontWeight.Bold
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Button(
+                    onClick = { running = !running },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = RTAccent
+                    )
+                ) {
+                    Text(if (running) "Pause" else "Resume")
                 }
 
                 OutlinedButton(
                     onClick = {
-                        state = nextMainState(state)
+                        running = false
+                        selectExperiment(experiment)
                     },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.weight(1f)
                 ) {
-                    Text("Run One Cycle")
+                    Text("Reset")
                 }
             }
-        }
 
-        // MAIN PARAMETERS
-
-        Card(Modifier.fillMaxWidth()) {
-
-            Column(
-                Modifier.padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            OutlinedButton(
+                onClick = {
+                    state = nextMainState(state)
+                },
+                modifier = Modifier.fillMaxWidth()
             ) {
-
-                Text(
-                    "Open System Controls",
-                    fontWeight = FontWeight.Bold
-                )
-
-                Text("External Input: ${(state.input * 100).toInt()}%")
-
-                Slider(
-                    value = state.input,
-                    onValueChange = {
-                        state = state.copy(input = it)
-                    }
-                )
-
-                Text("External Output: ${(state.output * 100).toInt()}%")
-
-                Slider(
-                    value = state.output,
-                    onValueChange = {
-                        state = state.copy(output = it)
-                    }
-                )
-
-                Text("Refresh Rate: ${(state.refreshRate * 100).toInt()}%")
-
-                Slider(
-                    value = state.refreshRate,
-                    onValueChange = {
-                        state = state.copy(refreshRate = it)
-                    }
-                )
-
-                HorizontalDivider()
-
-                Text(
-                    "Memory Controls",
-                    fontWeight = FontWeight.Bold
-                )
-
-                Text("Recording Rate: ${(state.recordingRate * 100).toInt()}%")
-
-                Slider(
-                    value = state.recordingRate,
-                    onValueChange = {
-                        state = state.copy(recordingRate = it)
-                    }
-                )
-
-                Text("Retention Rate: ${(state.retentionRate * 100).toInt()}%")
-
-                Slider(
-                    value = state.retentionRate,
-                    onValueChange = {
-                        state = state.copy(retentionRate = it)
-                    }
-                )
-
-                Text("Retrieval Rate: ${(state.retrievalRate * 100).toInt()}%")
-
-                Slider(
-                    value = state.retrievalRate,
-                    onValueChange = {
-                        state = state.copy(retrievalRate = it)
-                    }
-                )
+                Text("Run One Cycle")
             }
         }
 
-        // MATHEMATICAL RESULTS
+        /* SYSTEM CONTROLS */
 
-        Card(Modifier.fillMaxWidth()) {
+        ResearchCard("OPEN SYSTEM CONTROLS") {
 
-            Column(
-                Modifier.padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(9.dp)
+            ControlSlider(
+                "External Input",
+                state.input
             ) {
+                state = state.copy(input = it)
+            }
 
-                Text(
-                    "Mathematical Results",
-                    fontWeight = FontWeight.Bold
-                )
+            ControlSlider(
+                "External Output",
+                state.output
+            ) {
+                state = state.copy(output = it)
+            }
 
-                ResultLine(
-                    "Simulation Cycle",
-                    state.cycle.toString()
-                )
+            ControlSlider(
+                "Refresh Rate",
+                state.refreshRate
+            ) {
+                state = state.copy(refreshRate = it)
+            }
 
-                ResultLine(
-                    "System Activity",
-                    "${(state.systemActivity * 100).toInt()}%"
-                )
+            HorizontalDivider(
+                color = RTBorder
+            )
 
-                ResultLine(
-                    "Refresh Activity",
-                    "${(state.refreshRate * if (state.refreshEnabled) 100 else 0).toInt()}%"
-                )
+            Text(
+                "MEMORY CONTROLS",
+                color = RTPurple,
+                fontWeight = FontWeight.Bold
+            )
 
-                ResultLine(
-                    "Dynamic Stability",
-                    "${(state.dynamicStability * 100).toInt()}%"
-                )
+            ControlSlider(
+                "Recording Rate",
+                state.recordingRate
+            ) {
+                state = state.copy(recordingRate = it)
+            }
 
-                ResultLine(
-                    "Memory",
-                    "${(state.memoryValue * 100).toInt()}%"
-                )
+            ControlSlider(
+                "Retention Rate",
+                state.retentionRate
+            ) {
+                state = state.copy(retentionRate = it)
+            }
 
-                ResultLine(
-                    "Recording",
-                    "${(state.recording * 100).toInt()}%"
-                )
-
-                ResultLine(
-                    "Retrieval",
-                    "${(state.retrieval * 100).toInt()}%"
-                )
-
-                ResultLine(
-                    "Continuity",
-                    "${(state.continuity * 100).toInt()}%"
-                )
-
-                ResultLine(
-                    "Total Refresh Cycles",
-                    state.totalRefresh.toString()
-                )
+            ControlSlider(
+                "Retrieval Rate",
+                state.retrievalRate
+            ) {
+                state = state.copy(retrievalRate = it)
             }
         }
 
-        // GRAPH
+        /* MATHEMATICAL RESULTS */
 
-        Card(Modifier.fillMaxWidth()) {
+        ResearchCard("MATHEMATICAL RESULTS") {
 
-            Column(
-                Modifier.padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+            ResultLine("Simulation Cycle", state.cycle.toString())
 
-                Text(
-                    "Research Graph",
-                    fontWeight = FontWeight.Bold
-                )
+            ResultLine(
+                "System Activity",
+                "${(state.systemActivity * 100).toInt()}%"
+            )
 
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    GraphLegend(RTGreen, "Refresh")
-                    GraphLegend(RTViolet, "Stability")
-                    GraphLegend(RTPurple, "Memory")
-                }
+            ResultLine(
+                "Refresh Activity",
+                "${(state.refreshRate * if (state.refreshEnabled) 100 else 0).toInt()}%"
+            )
 
-                ResearchGraph(
-                    history = state.history,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(220.dp)
-                )
-            }
+            ResultLine(
+                "Dynamic Stability",
+                "${(state.dynamicStability * 100).toInt()}%"
+            )
+
+            ResultLine(
+                "Memory",
+                "${(state.memoryValue * 100).toInt()}%"
+            )
+
+            ResultLine(
+                "Recording",
+                "${(state.recording * 100).toInt()}%"
+            )
+
+            ResultLine(
+                "Retrieval",
+                "${(state.retrieval * 100).toInt()}%"
+            )
+
+            ResultLine(
+                "Continuity",
+                "${(state.continuity * 100).toInt()}%"
+            )
+
+            ResultLine(
+                "Total Refresh Cycles",
+                state.totalRefresh.toString()
+            )
         }
 
-        // PROPOSED EQUATIONS
+        /* RESEARCH GRAPH */
 
-        Card(Modifier.fillMaxWidth()) {
+        ResearchCard("RESEARCH GRAPH") {
 
-            Column(
-                Modifier.padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-
-                Text(
-                    "Mathematical Model",
-                    fontWeight = FontWeight.Bold
-                )
-
-                Text("Open System:")
-
-                Text(
-                    "X(t+1) = F(X, Input, Output, Refresh)"
-                )
-
-                HorizontalDivider()
-
-                Text("Dynamic Stability:")
-
-                Text(
-                    "D(t) = f(Exchange, Activity, Refresh, Memory)"
-                )
-
-                HorizontalDivider()
-
-                Text("Memory:")
-
-                Text(
-                    "M(t+1) = G(M(t), Recording, Refresh)"
-                )
-
-                Text(
-                    "ये हमारे Research Model के शुरुआती समीकरण हैं। प्रयोगों के परिणामों के अनुसार इन्हें विकसित किया जाएगा।"
-                )
+                GraphLegend(RTGreen, "Refresh")
+                GraphLegend(RTViolet, "Stability")
+                GraphLegend(RTPurple, "Memory")
             }
+
+            ResearchGraph(
+                history = state.history,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(220.dp)
+            )
         }
 
-        // EXPERIMENT RECORD
+        /* MATHEMATICAL MODEL */
 
-        Card(Modifier.fillMaxWidth()) {
+        ResearchCard("MATHEMATICAL MODEL") {
 
-            Column(
-                Modifier.padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(7.dp)
-            ) {
+            EquationLine(
+                "Open System",
+                "X(t+1) = F(X, Input, Output, Refresh)"
+            )
 
-                Text(
-                    "Experiment Record",
-                    fontWeight = FontWeight.Bold
-                )
+            EquationLine(
+                "Dynamic Stability",
+                "D(t) = f(Exchange, Activity, Refresh, Memory)"
+            )
 
-                Text("Experiment: $experiment")
-                Text("Cycles: ${state.cycle}")
-                Text("Refresh: ${state.refreshEnabled}")
-                Text("Memory: ${state.memoryEnabled}")
+            EquationLine(
+                "Memory",
+                "M(t+1) = G(M(t), Recording, Refresh)"
+            )
 
-                Text(
-                    "अंतिम Dynamic Stability: ${
-                        (state.dynamicStability * 100).toInt()
-                    }%"
-                )
-
-                Text(
-                    "अंतिम Memory: ${
-                        (state.memoryValue * 100).toInt()
-                    }%"
-                )
-            }
+            Text(
+                "ये हमारे Research Model के शुरुआती समीकरण हैं। प्रयोगों के परिणामों के अनुसार इन्हें विकसित किया जाएगा।",
+                color = RTSubText
+            )
         }
+
+        /* EXPERIMENT RECORD */
+
+        ResearchCard("EXPERIMENT RECORD") {
+
+            ResultLine("Experiment", experiment)
+
+            ResultLine(
+                "Cycles",
+                state.cycle.toString()
+            )
+
+            ResultLine(
+                "Refresh",
+                if (state.refreshEnabled) "ON" else "OFF"
+            )
+
+            ResultLine(
+                "Memory",
+                if (state.memoryEnabled) "ON" else "OFF"
+            )
+
+            ResultLine(
+                "Final Dynamic Stability",
+                "${(state.dynamicStability * 100).toInt()}%"
+            )
+
+            ResultLine(
+                "Final Memory",
+                "${(state.memoryValue * 100).toInt()}%"
+            )
+        }
+
+        Spacer(Modifier.height(24.dp))
     }
 }
 
@@ -1097,11 +1090,8 @@ private fun MicrostructureLab() {
     }
 
     LaunchedEffect(running) {
-
         while (running) {
-
             delay(650L)
-
             state = nextMicroState(state)
         }
     }
@@ -1111,191 +1101,167 @@ private fun MicrostructureLab() {
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
 
-        Text(
-            "Microstructure Research Lab",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold
-        )
+        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text(
+                "Microstructure Research Lab",
+                color = RTText,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.ExtraBold
+            )
 
-        Text(
-            "Local Connections • Structural Refresh • Pattern Continuity"
-        )
+            Text(
+                "Local Connections • Structural Refresh • Pattern Continuity",
+                color = RTSubText
+            )
+        }
 
-        Card(Modifier.fillMaxWidth()) {
+        ResearchCard("MICROSTRUCTURE SIMULATION") {
 
-            Column(
-                Modifier.padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            MicroCanvas(
+                state = state,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(320.dp)
+            )
+
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-
-                MicroCanvas(
-                    state = state,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(320.dp)
-                )
-
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    GraphLegend(RTGreen, "Particles")
-                    GraphLegend(RTCyan, "Connections")
-                    GraphLegend(RTBlue, "Input")
-                    GraphLegend(RTOrange, "Output")
-                }
+                GraphLegend(RTGreen, "Particles")
+                GraphLegend(RTCyan, "Connections")
+                GraphLegend(RTBlue, "Input")
+                GraphLegend(RTOrange, "Output")
             }
         }
 
-        Card(Modifier.fillMaxWidth()) {
+        ResearchCard("MICROSTRUCTURE STATUS") {
 
-            Column(
-                Modifier.padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(7.dp)
-            ) {
+            ResultLine("Cycles", state.cycle.toString())
+            ResultLine("Particles", state.particles.size.toString())
+            ResultLine("Connections", state.bonds.size.toString())
+            ResultLine("Connections Formed", state.formed.toString())
+            ResultLine("Connections Broken", state.broken.toString())
+            ResultLine("Input Total", state.totalInput.toString())
+            ResultLine("Output Total", state.totalOutput.toString())
 
-                Text(
-                    "Microstructure Status",
-                    fontWeight = FontWeight.Bold
-                )
+            ResultLine(
+                "Continuity",
+                "${(state.continuity * 100).toInt()}%"
+            )
 
-                ResultLine("Cycles", state.cycle.toString())
-                ResultLine("Particles", state.particles.size.toString())
-                ResultLine("Connections", state.bonds.size.toString())
-                ResultLine("Connections Formed", state.formed.toString())
-                ResultLine("Connections Broken", state.broken.toString())
-                ResultLine("Input Total", state.totalInput.toString())
-                ResultLine("Output Total", state.totalOutput.toString())
-                ResultLine("Continuity", "${(state.continuity * 100).toInt()}%")
-                ResultLine("Pattern Drift", state.drift.fmt(4))
-            }
+            ResultLine(
+                "Pattern Drift",
+                state.drift.fmt(4)
+            )
         }
 
-        Card(Modifier.fillMaxWidth()) {
+        ResearchCard("MICROSTRUCTURE CONTROLS") {
 
-            Column(
-                Modifier.padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ControlSlider(
+                "Input",
+                state.inputRate
             ) {
+                state = state.copy(inputRate = it)
+            }
 
-                Text(
-                    "Microstructure Controls",
-                    fontWeight = FontWeight.Bold
-                )
+            ControlSlider(
+                "Output",
+                state.outputRate
+            ) {
+                state = state.copy(outputRate = it)
+            }
 
-                Text("Input: ${(state.inputRate * 100).toInt()}%")
+            ControlSlider(
+                "Refresh",
+                state.refreshRate
+            ) {
+                state = state.copy(refreshRate = it)
+            }
 
-                Slider(
-                    value = state.inputRate,
-                    onValueChange = {
-                        state = state.copy(inputRate = it)
-                    }
-                )
+            ControlSlider(
+                "Attraction",
+                state.attraction
+            ) {
+                state = state.copy(attraction = it)
+            }
 
-                Text("Output: ${(state.outputRate * 100).toInt()}%")
+            ControlSlider(
+                "Repulsion",
+                state.repulsion
+            ) {
+                state = state.copy(repulsion = it)
+            }
 
-                Slider(
-                    value = state.outputRate,
-                    onValueChange = {
-                        state = state.copy(outputRate = it)
-                    }
-                )
+            Text(
+                "Connection Range: ${state.connectionRange.fmt(2)}",
+                color = RTText
+            )
 
-                Text("Refresh: ${(state.refreshRate * 100).toInt()}%")
+            Slider(
+                value = state.connectionRange,
+                onValueChange = {
+                    state = state.copy(connectionRange = it)
+                },
+                valueRange = 0.05f..0.22f
+            )
 
-                Slider(
-                    value = state.refreshRate,
-                    onValueChange = {
-                        state = state.copy(refreshRate = it)
-                    }
-                )
-
-                Text("Attraction: ${(state.attraction * 100).toInt()}%")
-
-                Slider(
-                    value = state.attraction,
-                    onValueChange = {
-                        state = state.copy(attraction = it)
-                    }
-                )
-
-                Text("Repulsion: ${(state.repulsion * 100).toInt()}%")
-
-                Slider(
-                    value = state.repulsion,
-                    onValueChange = {
-                        state = state.copy(repulsion = it)
-                    }
-                )
-
-                Text("Connection Range: ${state.connectionRange.fmt(2)}")
-
-                Slider(
-                    value = state.connectionRange,
-                    onValueChange = {
-                        state = state.copy(connectionRange = it)
-                    },
-                    valueRange = 0.05f..0.22f
-                )
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Button(
+                    onClick = { running = !running },
+                    modifier = Modifier.weight(1f)
                 ) {
-
-                    Button(
-                        onClick = {
-                            running = !running
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(if (running) "Pause" else "Resume")
-                    }
-
-                    OutlinedButton(
-                        onClick = {
-                            running = false
-                            state = initialMicroState()
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Reset")
-                    }
+                    Text(if (running) "Pause" else "Resume")
                 }
 
                 OutlinedButton(
                     onClick = {
-                        state = nextMicroState(state)
+                        running = false
+                        state = initialMicroState()
                     },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.weight(1f)
                 ) {
-                    Text("Run One Cycle")
+                    Text("Reset")
                 }
             }
-        }
 
-        Card(Modifier.fillMaxWidth()) {
-
-            Column(
-                Modifier.padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            OutlinedButton(
+                onClick = {
+                    state = nextMicroState(state)
+                },
+                modifier = Modifier.fillMaxWidth()
             ) {
-
-                Text(
-                    "Pattern Snapshots",
-                    fontWeight = FontWeight.Bold
-                )
-
-                state.snapshots.takeLast(8).reversed().forEach {
-
-                    Text(
-                        "Cycle ${it.cycle} | Particles ${it.particles} | Connections ${it.bonds}"
-                    )
-                }
+                Text("Run One Cycle")
             }
         }
+
+        ResearchCard("PATTERN SNAPSHOTS") {
+
+            if (state.snapshots.isEmpty()) {
+                Text(
+                    "Snapshots will appear after 30 simulation cycles.",
+                    color = RTSubText
+                )
+            } else {
+                state.snapshots
+                    .takeLast(8)
+                    .reversed()
+                    .forEach {
+                        Text(
+                            "Cycle ${it.cycle}  |  Particles ${it.particles}  |  Connections ${it.bonds}",
+                            color = RTText
+                        )
+                    }
+            }
+        }
+
+        Spacer(Modifier.height(24.dp))
     }
 }
 
@@ -1306,34 +1272,140 @@ private fun MicrostructureLab() {
 @Composable
 private fun FlowBox(
     label: String,
-    color: Color
+    color: Color,
+    modifier: Modifier = Modifier
 ) {
-
     Surface(
-        color = color.copy(alpha = 0.13f),
-        shape = RoundedCornerShape(10.dp)
+        modifier = modifier,
+        color = color.copy(alpha = 0.14f),
+        shape = RoundedCornerShape(12.dp),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            color.copy(alpha = 0.35f)
+        )
     ) {
-
-        Text(
-            label,
-            color = color,
-            fontWeight = FontWeight.Bold,
+        Box(
             modifier = Modifier.padding(
-                horizontal = 10.dp,
-                vertical = 12.dp
+                horizontal = 4.dp,
+                vertical = 16.dp
+            ),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                label,
+                color = color,
+                fontWeight = FontWeight.ExtraBold,
+                style = MaterialTheme.typography.labelLarge
             )
+        }
+    }
+}
+
+@Composable
+private fun ProcessArrow() {
+    Box(
+        modifier = Modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            "↓",
+            color = RTViolet,
+            style = MaterialTheme.typography.headlineLarge,
+            fontWeight = FontWeight.Bold
         )
     }
 }
 
 @Composable
-private fun IconArrow() {
+private fun ProcessBox(
+    title: String,
+    color: Color,
+    subtitle: String
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(15.dp),
+        color = color.copy(alpha = 0.13f),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            color.copy(alpha = 0.40f)
+        )
+    ) {
+        Column(
+            Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            Text(
+                title,
+                color = color,
+                fontWeight = FontWeight.ExtraBold,
+                style = MaterialTheme.typography.titleMedium
+            )
 
-    Text(
-        "↓",
-        color = MaterialTheme.colorScheme.secondary,
-        style = MaterialTheme.typography.headlineMedium
-    )
+            Text(
+                subtitle,
+                color = RTSubText,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
+}
+
+@Composable
+private fun ControlSlider(
+    label: String,
+    value: Float,
+    onValueChange: (Float) -> Unit
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(label, color = RTText)
+
+            Text(
+                "${(value * 100).toInt()}%",
+                color = RTCyan,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        Slider(
+            value = value,
+            onValueChange = onValueChange
+        )
+    }
+}
+
+@Composable
+private fun EquationLine(
+    title: String,
+    equation: String
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(5.dp)
+    ) {
+        Text(
+            title,
+            color = RTCyan,
+            fontWeight = FontWeight.Bold
+        )
+
+        Surface(
+            color = RTSurface2,
+            shape = RoundedCornerShape(10.dp)
+        ) {
+            Text(
+                equation,
+                color = RTText,
+                modifier = Modifier.padding(12.dp)
+            )
+        }
+    }
 }
 
 @Composable
@@ -1341,16 +1413,20 @@ private fun ResultLine(
     label: String,
     value: String
 ) {
-
     Row(
         Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-
-        Text(label)
+        Text(
+            label,
+            color = RTSubText,
+            modifier = Modifier.weight(1f)
+        )
 
         Text(
             value,
+            color = RTText,
             fontWeight = FontWeight.Bold
         )
     }
@@ -1361,19 +1437,18 @@ private fun GraphLegend(
     color: Color,
     label: String
 ) {
-
     Row(
         verticalAlignment = Alignment.CenterVertically
     ) {
-
         Canvas(Modifier.size(9.dp)) {
             drawCircle(color)
         }
 
-        Spacer(Modifier.width(4.dp))
+        Spacer(Modifier.width(5.dp))
 
         Text(
             label,
+            color = RTSubText,
             style = MaterialTheme.typography.labelSmall
         )
     }
@@ -1388,7 +1463,6 @@ private fun ResearchGraph(
     history: List<MainPoint>,
     modifier: Modifier = Modifier
 ) {
-
     Canvas(modifier) {
 
         val left = 12.dp.toPx()
@@ -1400,7 +1474,6 @@ private fun ResearchGraph(
         val graphHeight = bottom - top
 
         repeat(5) { i ->
-
             val y = top + graphHeight * i / 4f
 
             drawLine(
@@ -1417,7 +1490,6 @@ private fun ResearchGraph(
             values: List<Float>,
             color: Color
         ) {
-
             for (i in 0 until values.size - 1) {
 
                 val x1 = left +
@@ -1469,11 +1541,10 @@ private fun MicroCanvas(
     state: MicroState,
     modifier: Modifier = Modifier
 ) {
-
     Canvas(
         modifier = modifier
             .clip(RoundedCornerShape(14.dp))
-            .background(RTDark)
+            .background(Color(0xFF0B1220))
     ) {
 
         val sx = size.width
@@ -1500,12 +1571,10 @@ private fun MicroCanvas(
         val map = state.particles.associateBy { it.id }
 
         state.bonds.forEach { bond ->
-
             val a = map[bond.a]
             val b = map[bond.b]
 
             if (a != null && b != null) {
-
                 drawLine(
                     color = RTCyan.copy(alpha = 0.48f),
                     start = Offset(a.x * sx, a.y * sy),
@@ -1524,7 +1593,7 @@ private fun MicroCanvas(
 
             val radius = (
                 3.2f + sin(p.phase) * 0.35f
-                ).coerceAtLeast(2.5f).dp.toPx()
+            ).coerceAtLeast(2.5f).dp.toPx()
 
             drawCircle(
                 color = RTGreen.copy(alpha = 0.16f),
