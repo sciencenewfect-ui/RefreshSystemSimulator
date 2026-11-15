@@ -1,3 +1,4 @@
+
 package com.refreshsystem.simulator
 
 import android.media.AudioManager
@@ -14,12 +15,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import java.util.Locale
+import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -28,24 +31,21 @@ private val Orange = Color(0xFFFFB74D)
 private val Blue = Color(0xFF42A5F5)
 private val Violet = Color(0xFF9C8CFF)
 private val BackgroundDark = Color(0xFF0B1220)
+private val Cyan = Color(0xFF38BDF8)
 
-private const val FORMATION_SLOTS = 36
-
-private const val STAGE_ONE_MS = 60_000L
-private const val STAGE_TWO_END_MS = 180_000L
-private const val STAGE_THREE_END_MS = 360_000L
+private const val ATOM_COUNT = 36
 
 private enum class BoundarySide {
-    LEFT, RIGHT, TOP, BOTTOM
+    LEFT, RIGHT
 }
 
-private data class FormationAtom(
+private data class SystemAtom(
     val id: Int,
     val slot: Int,
-    val microPhase: Float = 0f
+    val phase: Float
 )
 
-private data class BoundaryParticle(
+private data class FlowParticle(
     val id: Int,
     val slot: Int,
     val progress: Float,
@@ -53,151 +53,91 @@ private data class BoundaryParticle(
     val side: BoundarySide
 )
 
-private data class FormationState(
-    val step: Int = 0,
-    val elapsedMillis: Long = 0L,
-    val atoms: List<FormationAtom> = emptyList(),
-    val boundaryParticles: List<BoundaryParticle> = emptyList(),
-    val refreshPercent: Float = 0.05f,
-    val internalMovement: Float = 0.55f,
-    val environment: Float = 0.50f,
-    val speed: Float = 1f,
-    val totalIn: Int = 0,
-    val totalOut: Int = 0,
-    val bondChanges: Int = 0,
-    val evolution: Float = 0f,
-    val lastEvent: String = "कण गति कर रहे हैं। अभी कोई निश्चित पैटर्न नहीं है।"
+private data class InformationRecord(
+    val id: Int,
+    val strength: Float,
+    val refreshCount: Int,
+    val age: Int
 )
 
-private fun clamp(value: Float) = value.coerceIn(0f, 1f)
+private data class SystemState(
+    val step: Int = 0,
+    val elapsedMillis: Long = 0L,
 
-private fun formationStage(elapsedMillis: Long): Int = when {
-    elapsedMillis < STAGE_ONE_MS -> 1
-    elapsedMillis < STAGE_TWO_END_MS -> 2
-    elapsedMillis < STAGE_THREE_END_MS -> 3
-    else -> 4
-}
+    val atoms: List<SystemAtom> = emptyList(),
+    val flowParticles: List<FlowParticle> = emptyList(),
 
-private fun makeInitialFormation(): FormationState {
-    val atoms = (0 until FORMATION_SLOTS).map { index ->
-        FormationAtom(
+    // External exchange and internal refresh
+    val inputRate: Float = 0.12f,
+    val outputRate: Float = 0.12f,
+    val internalRefresh: Float = 0.65f,
+    val speed: Float = 1f,
+
+    // Information and memory
+    val attention: Float = 0.65f,
+    val repetition: Float = 0.50f,
+    val memoryRetention: Float = 0.80f,
+    val informationEntries: Int = 0,
+    val recordingCount: Int = 0,
+    val memoryRefreshCount: Int = 0,
+    val records: List<InformationRecord> = emptyList(),
+
+    // System continuity
+    val totalIn: Int = 0,
+    val totalOut: Int = 0,
+    val internalChanges: Int = 0,
+    val continuity: Float = 1f,
+
+    val lastEvent: String =
+        "Open System तैयार है। Refresh प्रक्रिया शुरू होने की प्रतीक्षा है।"
+)
+
+private fun clamp(value: Float): Float =
+    value.coerceIn(0f, 1f)
+
+private fun initialSystem(): SystemState {
+    val atoms = (0 until ATOM_COUNT).map { index ->
+        SystemAtom(
             id = index + 1,
             slot = index,
-            microPhase = index * 0.37f
+            phase = index * 0.41f
         )
     }
 
-    return FormationState(atoms = atoms)
+    return SystemState(atoms = atoms)
 }
 
 /* ---------------------------------------------------------
-   PATTERN POSITIONS
+   DYNAMIC PATTERN
+   Pattern remains recognizable but continuously changes.
    --------------------------------------------------------- */
 
-private fun scatteredPoints(): List<Pair<Float, Float>> {
-    return (0 until FORMATION_SLOTS).map { index ->
-        val x = 0.13f + ((index * 37) % 73) / 100f
-        val y = 0.17f + ((index * 53) % 65) / 100f
-        x to y
-    }
-}
-
-private fun wPatternPoints(): List<Pair<Float, Float>> {
-    val vertices = listOf(
-        0.12f to 0.28f,
-        0.24f to 0.72f,
-        0.38f to 0.36f,
-        0.50f to 0.72f,
-        0.63f to 0.36f,
-        0.76f to 0.72f,
-        0.88f to 0.28f
-    )
-
-    return (0 until FORMATION_SLOTS).map { index ->
-        val t = index.toFloat() / (FORMATION_SLOTS - 1)
-        val scaled = t * (vertices.size - 1)
-        val segment = scaled.toInt().coerceAtMost(vertices.size - 2)
-        val local = scaled - segment
-
-        val a = vertices[segment]
-        val b = vertices[segment + 1]
-
-        (a.first + (b.first - a.first) * local) to
-            (a.second + (b.second - a.second) * local)
-    }
-}
-
-private fun evolutionTarget(
-    environment: Float
+private fun systemPattern(
+    state: SystemState
 ): List<Pair<Float, Float>> {
 
-    return (0 until FORMATION_SLOTS).map { index ->
-        val t = index.toFloat() / (FORMATION_SLOTS - 1)
-        val x = 0.12f + 0.76f * t
+    return (0 until ATOM_COUNT).map { index ->
 
-        val y = if (environment < 0.5f) {
-            if (t < 0.5f) {
-                0.36f + 0.30f * (t / 0.5f)
-            } else {
-                0.66f - 0.30f * ((t - 0.5f) / 0.5f)
-            }
-        } else {
-            0.50f + 0.20f * sin(t * Math.PI * 2.0).toFloat()
-        }
+        val angle = 2.0 * PI * index / ATOM_COUNT
+        val baseRadius = 0.30f
+
+        val phase = state.atoms
+            .firstOrNull { it.slot == index }
+            ?.phase ?: 0f
+
+        val movement =
+            state.internalRefresh * 0.025f
+
+        val radius = baseRadius +
+            sin(phase.toDouble()).toFloat() * movement
+
+        val x = 0.50f +
+            cos(angle).toFloat() * radius
+
+        val y = 0.50f +
+            sin(angle).toFloat() * radius
 
         x to y
-    }
-}
-
-/*
- * Stage 1: scattered particles.
- * Stage 2: particles gradually move toward W positions.
- * Stage 3: complete W remains visible.
- * Stage 4: W gradually changes toward another pattern.
- */
-private fun formationPoints(
-    state: FormationState
-): List<Pair<Float, Float>> {
-
-    val scattered = scatteredPoints()
-    val w = wPatternPoints()
-    val target = evolutionTarget(state.environment)
-
-    val stage = formationStage(state.elapsedMillis)
-
-    val buildProgress = when (stage) {
-        1 -> 0f
-        2 -> (
-            (state.elapsedMillis - STAGE_ONE_MS).toFloat() /
-                (STAGE_TWO_END_MS - STAGE_ONE_MS)
-            ).coerceIn(0f, 1f)
-        else -> 1f
-    }
-
-    val evolutionProgress = if (stage == 4) {
-        state.evolution.coerceIn(0f, 1f)
-    } else {
-        0f
-    }
-
-    return (0 until FORMATION_SLOTS).map { index ->
-
-        val baseX = scattered[index].first
-        val baseY = scattered[index].second
-
-        val wX = w[index].first
-        val wY = w[index].second
-
-        val evolvedX = target[index].first
-        val evolvedY = target[index].second
-
-        val formedX = baseX + (wX - baseX) * buildProgress
-        val formedY = baseY + (wY - baseY) * buildProgress
-
-        val finalX = formedX + (evolvedX - formedX) * evolutionProgress
-        val finalY = formedY + (evolvedY - formedY) * evolutionProgress
-
-        finalX to finalY
     }
 }
 
@@ -205,151 +145,252 @@ private fun formationPoints(
    SIMULATION ENGINE
    --------------------------------------------------------- */
 
-private fun nextFormationState(
-    old: FormationState,
+private fun nextSystemState(
+    old: SystemState,
     cycleDurationMs: Long
-): FormationState {
+): SystemState {
 
     val nextStep = old.step + 1
 
-    val elapsed = old.elapsedMillis + cycleDurationMs
-    val stage = formationStage(elapsed)
-
     val atoms = old.atoms
-        .ifEmpty { makeInitialFormation().atoms }
+        .ifEmpty { initialSystem().atoms }
         .toMutableList()
 
-    val boundary = old.boundaryParticles.mapNotNull { particle ->
-        val nextProgress = particle.progress + 0.22f
-        if (nextProgress >= 1f) null
-        else particle.copy(progress = nextProgress)
-    }.toMutableList()
+    val particles = old.flowParticles
+        .mapNotNull { particle ->
+            val next = particle.progress + 0.18f
+            if (next >= 1f) null
+            else particle.copy(progress = next)
+        }
+        .toMutableList()
 
     var totalIn = old.totalIn
     var totalOut = old.totalOut
-    var bondChanges = old.bondChanges
+    var informationEntries = old.informationEntries
+    var recordingCount = old.recordingCount
+    var memoryRefreshCount = old.memoryRefreshCount
+    var internalChanges = old.internalChanges
 
-    val exchangeCount = (
-        FORMATION_SLOTS *
-            old.refreshPercent.coerceIn(0.01f, 0.20f)
-        ).toInt().coerceAtLeast(1)
+    // -----------------------------------------------------
+    // 1. Boundary Exchange
+    // Information and particles enter the Open System.
+    // Output and input are independent controls.
+    // -----------------------------------------------------
 
-    val perSide = (exchangeCount / 4).coerceAtLeast(1)
+    val exchangeSlots = listOf(
+        0, 1, 2, 3, 4, 5,
+        30, 31, 32, 33, 34, 35
+    )
 
-    // चारों दिशाओं में Entry और Exit दोनों।
-    if (nextStep % 2 == 0) {
+    val inputAccumulator =
+        old.inputRate * 6f
 
-        val sideSlots = listOf(
-            BoundarySide.LEFT to listOf(0, 1, 2),
-            BoundarySide.RIGHT to listOf(33, 34, 35),
-            BoundarySide.TOP to listOf(5, 17, 29),
-            BoundarySide.BOTTOM to listOf(11, 23, 35)
+    val outputAccumulator =
+        old.outputRate * 6f
+
+    val inputCount = inputAccumulator.toInt() +
+        if ((nextStep % 10) < (inputAccumulator % 1f * 10f)) 1 else 0
+
+    val outputCount = outputAccumulator.toInt() +
+        if ((nextStep % 10) < (outputAccumulator % 1f * 10f)) 1 else 0
+
+    repeat(inputCount.coerceIn(0, 6)) { n ->
+
+        val slot = exchangeSlots[
+            (nextStep + n) % exchangeSlots.size
+        ]
+
+        val newId = (atoms.maxOfOrNull { it.id } ?: 0) + 1
+        val oldAtomIndex = atoms.indexOfFirst { it.slot == slot }
+
+        if (oldAtomIndex >= 0) {
+            atoms[oldAtomIndex] = SystemAtom(
+                id = newId,
+                slot = slot,
+                phase = nextStep * 0.31f + n
+            )
+        }
+
+        val side = if (slot < 6) {
+            BoundarySide.LEFT
+        } else {
+            BoundarySide.RIGHT
+        }
+
+        particles.add(
+            FlowParticle(
+                id = newId,
+                slot = slot,
+                progress = 0f,
+                entering = true,
+                side = side
+            )
         )
 
-        sideSlots.forEachIndexed { sideIndex, (side, slots) ->
+        totalIn++
+    }
 
-            repeat(perSide.coerceAtMost(slots.size)) { n ->
+    repeat(outputCount.coerceIn(0, 6)) { n ->
 
-                val slot = slots[
-                    (nextStep / 2 + n + sideIndex) % slots.size
-                ]
+        val slot = exchangeSlots[
+            (nextStep * 3 + n) % exchangeSlots.size
+        ]
 
-                val atomIndex = atoms.indexOfFirst {
-                    it.slot == slot
-                }
+        val atom = atoms.firstOrNull { it.slot == slot }
 
-                if (atomIndex >= 0) {
+        if (atom != null) {
 
-                    val oldAtom = atoms[atomIndex]
-
-                    boundary.add(
-                        BoundaryParticle(
-                            id = oldAtom.id,
-                            slot = slot,
-                            progress = 0f,
-                            entering = false,
-                            side = side
-                        )
-                    )
-
-                    val newId =
-                        (atoms.maxOfOrNull { it.id } ?: 0) + 1
-
-                    atoms[atomIndex] = FormationAtom(
-                        id = newId,
-                        slot = slot,
-                        microPhase = nextStep * 0.41f + n + sideIndex
-                    )
-
-                    boundary.add(
-                        BoundaryParticle(
-                            id = newId,
-                            slot = slot,
-                            progress = 0f,
-                            entering = true,
-                            side = side
-                        )
-                    )
-
-                    totalOut++
-                    totalIn++
-                }
+            val side = if (slot < 6) {
+                BoundarySide.LEFT
+            } else {
+                BoundarySide.RIGHT
             }
+
+            particles.add(
+                FlowParticle(
+                    id = atom.id,
+                    slot = slot,
+                    progress = 0f,
+                    entering = false,
+                    side = side
+                )
+            )
+
+            totalOut++
         }
     }
 
-    // पूरे सिस्टम के अंदर सभी कणों की आंतरिक गति।
+    // -----------------------------------------------------
+    // 2. Internal Refresh
+    // Every internal atom changes its micro-state.
+    // The overall pattern remains recognizable.
+    // -----------------------------------------------------
+
     val movedAtoms = atoms.map { atom ->
         atom.copy(
-            microPhase = atom.microPhase +
-                old.internalMovement * 0.34f + 0.08f
+            phase = atom.phase +
+                0.08f +
+                old.internalRefresh * 0.35f
         )
     }
 
-    if (stage >= 2) {
-        bondChanges += 2 + (old.internalMovement * 5).toInt()
+    internalChanges += movedAtoms.size
+
+    // -----------------------------------------------------
+    // 3. Information Entry
+    // Entry is part of the Refresh process itself.
+    // -----------------------------------------------------
+
+    val informationArrives =
+        old.inputRate > 0f &&
+        nextStep % 2 == 0
+
+    var records = old.records
+
+    if (informationArrives) {
+
+        informationEntries++
+
+        // Repetition and attention increase recording chance.
+        val recordingProbability = clamp(
+            0.10f +
+                old.attention * 0.45f +
+                old.repetition * 0.40f
+        )
+
+        val deterministicSignal =
+            ((nextStep * 37) % 100) / 100f
+
+        if (deterministicSignal < recordingProbability) {
+
+            recordingCount++
+
+            val newRecord = InformationRecord(
+                id = recordingCount,
+                strength = recordingProbability,
+                refreshCount = 0,
+                age = 0
+            )
+
+            records = (records + newRecord).takeLast(20)
+        }
     }
 
-    // Evolution वास्तविक बीते समय के अनुसार बढ़ती है।
-    val evolution = if (stage >= 4) {
-        (
-            old.evolution +
-                (cycleDurationMs / 1000f) * 0.0015f *
-                (0.35f + old.environment)
-            ).coerceAtMost(1f)
-    } else {
-        0f
+    // -----------------------------------------------------
+    // 4. Memory Refresh
+    // Existing records are refreshed continuously.
+    // Retention controls how strongly they remain.
+    // -----------------------------------------------------
+
+    records = records.map { record ->
+
+        val refreshed = record.refreshCount + 1
+
+        record.copy(
+            strength = clamp(
+                record.strength *
+                    (0.995f + old.memoryRetention * 0.005f)
+            ),
+            refreshCount = refreshed,
+            age = record.age + 1
+        )
     }
 
-    val message = when (stage) {
-        1 ->
-            "पहला चरण: कण स्वतंत्र रूप से गति कर रहे हैं। चारों दिशाओं में पदार्थ का आदान-प्रदान हो रहा है।"
+    memoryRefreshCount += records.size
 
-        2 ->
-            "दूसरा चरण: कण धीरे-धीरे अपनी नई स्थितियों की ओर बढ़ रहे हैं। उनके बीच नए संबंध बन रहे हैं और W-पैटर्न आकार ले रहा है।"
+    // -----------------------------------------------------
+    // 5. Operational Continuity
+    // This is a simulation metric, not metaphysical
+    // Stability or proof of consciousness.
+    // -----------------------------------------------------
 
-        3 ->
-            "तीसरा चरण: W-पैटर्न बन चुका है। चारों दिशाओं से कुछ कण अंदर आ रहे हैं और कुछ बाहर जा रहे हैं। अंदर के कण भी लगातार अपने संबंध बदल रहे हैं।"
+    val exchangeBalance =
+        1f - kotlin.math.abs(old.inputRate - old.outputRate)
+
+    val activity = (
+        old.internalRefresh * 0.65f +
+            exchangeBalance * 0.20f +
+            old.memoryRetention * 0.15f
+        ).coerceIn(0f, 1f)
+
+    val continuity = (
+        old.continuity * 0.90f +
+            activity * 0.10f
+        ).coerceIn(0f, 1f)
+
+    val message = when {
+        informationArrives && records.isNotEmpty() ->
+            "नई सूचना सिस्टम में प्रवेश कर रही है। Refresh के दौरान कुछ सूचनाएँ Record हो रही हैं और पुरानी Memory भी Refresh हो रही है।"
+
+        informationArrives ->
+            "नई सूचना Open System में प्रवेश कर रही है। सूचना का प्रवेश स्वयं Refresh प्रक्रिया का हिस्सा है।"
+
+        records.isNotEmpty() ->
+            "सिस्टम का Pattern लगातार Refresh हो रहा है। पहले से Record की गई Memory भी Refresh हो रही है।"
 
         else ->
-            "चौथा चरण: पूरा सिस्टम लगातार Refresh हो रहा है। लंबे समय के बदलाव जमा होकर अगले मिलते-जुलते Pattern की दिशा को प्रभावित कर रहे हैं।"
+            "Open System की आंतरिक अवस्था बदल रही है। Pattern की निरंतरता बनी हुई है।"
     }
 
     return old.copy(
         step = nextStep,
-        elapsedMillis = elapsed,
+        elapsedMillis = old.elapsedMillis + cycleDurationMs,
         atoms = movedAtoms,
-        boundaryParticles = boundary,
+        flowParticles = particles,
         totalIn = totalIn,
         totalOut = totalOut,
-        bondChanges = bondChanges,
-        evolution = evolution,
+        informationEntries = informationEntries,
+        recordingCount = recordingCount,
+        memoryRefreshCount = memoryRefreshCount,
+        records = records,
+        internalChanges = internalChanges,
+        continuity = continuity,
         lastEvent = message
     )
 }
 
 /* ---------------------------------------------------------
-   MAIN APP
+   MAIN SCREEN
    --------------------------------------------------------- */
 
 @Composable
@@ -359,27 +400,27 @@ fun ResearchHomeScreen() {
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
         ) {
-            OpenSystemFormationLab()
+            OpenSystemDynamicStabilityLab()
         }
     }
 }
 
 /* ---------------------------------------------------------
-   FORMATION LAB SCREEN
+   OPEN SYSTEM LAB
    --------------------------------------------------------- */
 
 @Composable
-private fun OpenSystemFormationLab() {
+private fun OpenSystemDynamicStabilityLab() {
 
     var simulation by remember {
-        mutableStateOf(makeInitialFormation())
+        mutableStateOf(initialSystem())
     }
 
     var running by remember { mutableStateOf(true) }
-    var soundEnabled by remember { mutableStateOf(true) }
+    var soundEnabled by remember { mutableStateOf(false) }
 
     val toneGenerator = remember {
-        ToneGenerator(AudioManager.STREAM_MUSIC, 65)
+        ToneGenerator(AudioManager.STREAM_MUSIC, 60)
     }
 
     DisposableEffect(Unit) {
@@ -389,8 +430,6 @@ private fun OpenSystemFormationLab() {
         }
     }
 
-    // Simulation speed controls particle refresh.
-    // Timeline advances by actual elapsed cycle time.
     LaunchedEffect(running, simulation.speed) {
 
         while (running) {
@@ -401,61 +440,37 @@ private fun OpenSystemFormationLab() {
 
             delay(cycleDelay)
 
-            simulation = nextFormationState(
-                old = simulation,
-                cycleDurationMs = cycleDelay
+            simulation = nextSystemState(
+                simulation,
+                cycleDelay
             )
         }
     }
 
-    // Continuous vibration-like beep.
-    // Higher simulation speed = faster beep repetition.
     LaunchedEffect(running, soundEnabled, simulation.speed) {
 
         toneGenerator.stopTone()
 
         while (running && soundEnabled) {
 
-            val soundInterval = (
-                260L / simulation.speed.coerceIn(0.4f, 3f)
-            ).toLong().coerceAtLeast(65L)
+            val interval = (
+                500L / simulation.speed.coerceIn(0.4f, 3f)
+            ).toLong().coerceAtLeast(100L)
 
             toneGenerator.startTone(
                 ToneGenerator.TONE_PROP_BEEP2,
-                55
+                50
             )
 
-            delay(soundInterval)
+            delay(interval)
         }
 
         toneGenerator.stopTone()
     }
 
-    val stage = formationStage(simulation.elapsedMillis)
-
-    val patternName = when (stage) {
-        1 -> "अभी कोई निश्चित Pattern नहीं"
-        2 -> "W Pattern बन रहा है"
-        3 -> "W Pattern"
-        else -> if (simulation.environment < 0.5f) {
-            "T जैसा संभावित Pattern"
-        } else {
-            "B जैसा संभावित Pattern"
-        }
-    }
-
-    val stageProgress = when (stage) {
-        1 -> simulation.elapsedMillis.toFloat() / STAGE_ONE_MS
-        2 -> (
-            (simulation.elapsedMillis - STAGE_ONE_MS).toFloat() /
-                (STAGE_TWO_END_MS - STAGE_ONE_MS)
-            )
-        3 -> (
-            (simulation.elapsedMillis - STAGE_TWO_END_MS).toFloat() /
-                (STAGE_THREE_END_MS - STAGE_TWO_END_MS)
-            )
-        else -> simulation.evolution
-    }.coerceIn(0f, 1f)
+    val elapsedSeconds = simulation.elapsedMillis / 1000L
+    val minutes = elapsedSeconds / 60L
+    val seconds = elapsedSeconds % 60L
 
     Column(
         modifier = Modifier
@@ -472,15 +487,15 @@ private fun OpenSystemFormationLab() {
         )
 
         Text(
-            "Open System: Formation, Refresh और Evolution",
+            "Open System & Dynamic Stability Lab",
             style = MaterialTheme.typography.titleMedium
         )
 
         Text(
-            "कणों के लगातार बदलने, संबंध बनने और सिस्टम के Pattern को बनाए रखने की प्रक्रिया।"
+            "एक ऐसा Open System जिसमें Pattern लगातार Refresh होता है और बदलावों के बावजूद उसकी कार्यात्मक निरंतरता बनी रहती है।"
         )
 
-        /* SIMULATION VIEW */
+        /* SYSTEM VISUALIZATION */
 
         Card(Modifier.fillMaxWidth()) {
             Column(
@@ -488,25 +503,13 @@ private fun OpenSystemFormationLab() {
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
 
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        "जीवित संरचना का मॉडल",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
+                Text(
+                    "जीवित Open System Pattern",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
 
-                    Text(
-                        "चरण $stage / 4",
-                        color = Color(0xFF67E8F9),
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                FormationCanvas(
+                SystemCanvas(
                     state = simulation,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -517,80 +520,21 @@ private fun OpenSystemFormationLab() {
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    FormationLegend(Blue, "नया प्रवेश")
-                    FormationLegend(Orange, "बाहर निकास")
-                    FormationLegend(Green, "अंदर के कण")
+                    Legend(Blue, "सूचना / Entry")
+                    Legend(Orange, "Output")
+                    Legend(Green, "Internal Refresh")
                 }
 
                 Text(simulation.lastEvent)
 
                 Text(
-                    "वर्तमान Pattern: $patternName",
+                    "Pattern: Continuous Refresh",
                     fontWeight = FontWeight.Bold
-                )
-
-                LinearProgressIndicator(
-                    progress = { stageProgress },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                if (stage < 4) {
-                    Text(
-                        "इस चरण की प्रगति: ${(stageProgress * 100).toInt()}%"
-                    )
-                } else {
-                    Text(
-                        "Evolution प्रगति: ${(simulation.evolution * 100).toInt()}%"
-                    )
-                }
-            }
-        }
-
-        /* TIMELINE */
-
-        Card(Modifier.fillMaxWidth()) {
-            Column(
-                Modifier.padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-
-                Text(
-                    "प्रक्रिया की Timeline",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-
-                TimelineItem(
-                    number = 1,
-                    title = "कणों की गति और Entry / Exit",
-                    duration = "1 मिनट",
-                    active = stage == 1
-                )
-
-                TimelineItem(
-                    number = 2,
-                    title = "कणों के जुड़ने से W-पैटर्न बनना",
-                    duration = "2 मिनट",
-                    active = stage == 2
-                )
-
-                TimelineItem(
-                    number = 3,
-                    title = "W-पैटर्न का लगातार Refresh होना",
-                    duration = "3 मिनट",
-                    active = stage == 3
-                )
-
-                TimelineItem(
-                    number = 4,
-                    title = "लंबे समय में Pattern Evolution",
-                    duration = "अनलिमिटेड",
-                    active = stage == 4
                 )
             }
         }
 
-        /* LIVE SYSTEM STATUS */
+        /* DYNAMIC STABILITY */
 
         Card(Modifier.fillMaxWidth()) {
             Column(
@@ -599,24 +543,106 @@ private fun OpenSystemFormationLab() {
             ) {
 
                 Text(
-                    "अभी सिस्टम में क्या हो रहा है?",
-                    style = MaterialTheme.typography.titleMedium,
+                    "Dynamic Stability",
+                    style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
 
-                Text("वर्तमान Pattern: $patternName")
-                Text("कुल Simulation Cycles: ${simulation.step}")
-                Text("सिस्टम के अंदर कण: ${simulation.atoms.size}")
-                Text("कुल अंदर आए: ${simulation.totalIn}")
-                Text("कुल बाहर गए: ${simulation.totalOut}")
-                Text("बदले / Refresh हुए Bonds: ${simulation.bondChanges}")
-
-                val elapsedSeconds = simulation.elapsedMillis / 1000L
-                val minutes = elapsedSeconds / 60L
-                val seconds = elapsedSeconds % 60L
+                Text(
+                    "यहाँ Dynamic Stability का अर्थ है: सिस्टम के अंदर लगातार बदलाव होने के बावजूद उसकी कार्यात्मक निरंतरता।"
+                )
 
                 Text(
-                    "कुल बीता समय: %02d:%02d".format(minutes, seconds),
+                    "Operational Continuity: ${(simulation.continuity * 100).toInt()}%",
+                    fontWeight = FontWeight.Bold
+                )
+
+                LinearProgressIndicator(
+                    progress = { simulation.continuity },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Text(
+                    "Internal Changes: ${simulation.internalChanges}"
+                )
+
+                Text(
+                    "यह एक प्रयोगात्मक गणनात्मक सूचकांक है, वास्तविकता की पूर्ण Stability का माप नहीं।",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        /* INFORMATION AND MEMORY */
+
+        Card(Modifier.fillMaxWidth()) {
+            Column(
+                Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+
+                Text(
+                    "Information & Memory Lab",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Text("सिस्टम में आई कुल सूचनाएँ: ${simulation.informationEntries}")
+                Text("Record हुई सूचनाएँ: ${simulation.recordingCount}")
+                Text("Memory Refresh Cycles: ${simulation.memoryRefreshCount}")
+                Text("वर्तमान Memory Records: ${simulation.records.size}")
+
+                HorizontalDivider()
+
+                Text(
+                    "हाल की Memory Records",
+                    fontWeight = FontWeight.Bold
+                )
+
+                if (simulation.records.isEmpty()) {
+                    Text("अभी कोई सूचना Record नहीं हुई है।")
+                } else {
+                    simulation.records.takeLast(5).reversed().forEach { record ->
+                        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text(
+                                "Record #${record.id}",
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "Strength: ${(record.strength * 100).toInt()}%  |  Refresh: ${record.refreshCount}"
+                            )
+                            LinearProgressIndicator(
+                                progress = { record.strength },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        /* LIVE STATUS */
+
+        Card(Modifier.fillMaxWidth()) {
+            Column(
+                Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(7.dp)
+            ) {
+
+                Text(
+                    "Live System Status",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Text("Simulation Cycles: ${simulation.step}")
+                Text("System Particles: ${simulation.atoms.size}")
+                Text("Total Input: ${simulation.totalIn}")
+                Text("Total Output: ${simulation.totalOut}")
+
+                Text(
+                    "Elapsed Time: %02d:%02d".format(minutes, seconds),
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -651,17 +677,10 @@ private fun OpenSystemFormationLab() {
                                 650L / simulation.speed.coerceIn(0.4f, 3f)
                             ).toLong().coerceAtLeast(80L)
 
-                            simulation = nextFormationState(
+                            simulation = nextSystemState(
                                 simulation,
                                 cycleDelay
                             )
-
-                            if (soundEnabled) {
-                                toneGenerator.startTone(
-                                    ToneGenerator.TONE_PROP_BEEP2,
-                                    55
-                                )
-                            }
                         },
                         modifier = Modifier.weight(1f)
                     ) {
@@ -669,16 +688,7 @@ private fun OpenSystemFormationLab() {
                     }
                 }
 
-                Text(
-                    "Simulation Speed: ${
-                        String.format(
-                            Locale.getDefault(),
-                            "%.1f",
-                            simulation.speed
-                        )
-                    }x",
-                    fontWeight = FontWeight.Bold
-                )
+                Text("Simulation Speed: ${String.format(Locale.getDefault(), "%.1f", simulation.speed)}x")
 
                 Slider(
                     value = simulation.speed,
@@ -688,38 +698,78 @@ private fun OpenSystemFormationLab() {
                     valueRange = 0.4f..3f
                 )
 
+                HorizontalDivider()
+
                 Text(
-                    "Boundary Exchange: ${(simulation.refreshPercent * 100).toInt()}%"
+                    "External Information / Input: ${(simulation.inputRate * 100).toInt()}%"
                 )
 
                 Slider(
-                    value = simulation.refreshPercent,
+                    value = simulation.inputRate,
                     onValueChange = {
-                        simulation = simulation.copy(refreshPercent = it)
+                        simulation = simulation.copy(inputRate = it)
                     },
-                    valueRange = 0.01f..0.20f
+                    valueRange = 0f..1f
                 )
 
                 Text(
-                    "Internal Movement: ${(simulation.internalMovement * 100).toInt()}%"
+                    "External Output: ${(simulation.outputRate * 100).toInt()}%"
                 )
 
                 Slider(
-                    value = simulation.internalMovement,
+                    value = simulation.outputRate,
                     onValueChange = {
-                        simulation = simulation.copy(internalMovement = it)
+                        simulation = simulation.copy(outputRate = it)
                     },
-                    valueRange = 0.05f..1f
+                    valueRange = 0f..1f
                 )
 
                 Text(
-                    "Environment Influence: ${(simulation.environment * 100).toInt()}%"
+                    "Internal Refresh: ${(simulation.internalRefresh * 100).toInt()}%"
                 )
 
                 Slider(
-                    value = simulation.environment,
+                    value = simulation.internalRefresh,
                     onValueChange = {
-                        simulation = simulation.copy(environment = it)
+                        simulation = simulation.copy(internalRefresh = it)
+                    },
+                    valueRange = 0f..1f
+                )
+
+                HorizontalDivider()
+
+                Text(
+                    "Attention: ${(simulation.attention * 100).toInt()}%"
+                )
+
+                Slider(
+                    value = simulation.attention,
+                    onValueChange = {
+                        simulation = simulation.copy(attention = it)
+                    },
+                    valueRange = 0f..1f
+                )
+
+                Text(
+                    "Repetition: ${(simulation.repetition * 100).toInt()}%"
+                )
+
+                Slider(
+                    value = simulation.repetition,
+                    onValueChange = {
+                        simulation = simulation.copy(repetition = it)
+                    },
+                    valueRange = 0f..1f
+                )
+
+                Text(
+                    "Memory Retention: ${(simulation.memoryRetention * 100).toInt()}%"
+                )
+
+                Slider(
+                    value = simulation.memoryRetention,
+                    onValueChange = {
+                        simulation = simulation.copy(memoryRetention = it)
                     },
                     valueRange = 0f..1f
                 )
@@ -732,39 +782,32 @@ private fun OpenSystemFormationLab() {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column {
+                        Text("Refresh Sound", fontWeight = FontWeight.Bold)
                         Text(
-                            "Refresh Vibration Sound",
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        Text(
-                            if (soundEnabled) "बीप ध्वनि चालू है"
-                            else "बीप ध्वनि बंद है",
+                            if (soundEnabled) "चालू" else "बंद",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
 
                     Switch(
                         checked = soundEnabled,
-                        onCheckedChange = {
-                            soundEnabled = it
-                        }
+                        onCheckedChange = { soundEnabled = it }
                     )
                 }
 
                 OutlinedButton(
                     onClick = {
                         running = false
-                        simulation = makeInitialFormation()
+                        simulation = initialSystem()
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("पूरी प्रक्रिया फिर से शुरू करें")
+                    Text("Reset Simulation")
                 }
             }
         }
 
-        /* EXPLANATION */
+        /* EXPERIMENT GUIDE */
 
         Card(Modifier.fillMaxWidth()) {
             Column(
@@ -773,67 +816,31 @@ private fun OpenSystemFormationLab() {
             ) {
 
                 Text(
-                    "आसान भाषा में समझें",
+                    "प्रयोग कैसे करें?",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
 
                 Text(
-                    "पहले चरण में कण स्वतंत्र रूप से गति करते हैं। चारों दिशाओं से पदार्थ का आदान-प्रदान होता है।"
+                    "प्रयोग 1: Input और Output दोनों चालू रखें। देखें कि Pattern और Internal Refresh कैसे चलते हैं।"
                 )
 
                 Text(
-                    "दूसरे चरण में कण धीरे-धीरे अपनी नई स्थितियों की ओर बढ़ते हैं। उनके बीच कनेक्शन एक-एक करके बनते हैं और W-पैटर्न धीरे-धीरे उभरता है।"
+                    "प्रयोग 2: Input को शून्य करें, लेकिन Output और Internal Refresh चालू रखें। देखें कि बाहरी सूचना बंद होने पर सिस्टम के अंदर क्या होता है।"
                 )
 
                 Text(
-                    "तीसरे चरण में पूरा W-पैटर्न बना रहता है। कुछ कण बाहर जाते हैं, नए कण अंदर आते हैं और बाकी कण भी आंतरिक रूप से गति करके अपने संबंध बदलते रहते हैं।"
+                    "प्रयोग 3: Attention और Repetition बढ़ाएँ। देखें कि सूचना के Record होने की संभावना कैसे बदलती है।"
                 )
 
                 Text(
-                    "चौथे चरण में लंबे समय के बदलाव जमा होकर अगले मिलते-जुलते Pattern की दिशा को प्रभावित करते हैं।"
+                    "प्रयोग 4: Memory Retention बदलें और देखें कि पहले से Record हुई सूचनाओं की Strength कैसे बदलती है।"
+                )
+
+                Text(
+                    "ध्यान दें: यह प्रारंभिक मॉडल है। इसमें वास्तविक जैविक चेतना, वास्तविक ऊर्जा संरक्षण या वास्तविक मानव स्मृति का अनुकरण सिद्ध नहीं किया गया है।"
                 )
             }
-        }
-    }
-}
-
-/* ---------------------------------------------------------
-   TIMELINE COMPONENT
-   --------------------------------------------------------- */
-
-@Composable
-private fun TimelineItem(
-    number: Int,
-    title: String,
-    duration: String,
-    active: Boolean
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-
-        Text(
-            if (active) "●" else "○",
-            color = if (active) Green
-            else MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        Spacer(Modifier.width(10.dp))
-
-        Column(Modifier.weight(1f)) {
-            Text(
-                "$number. $title",
-                color = if (active) Green
-                else MaterialTheme.colorScheme.onSurface,
-                fontWeight = if (active) FontWeight.Bold else FontWeight.Normal
-            )
-            Text(
-                duration,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
     }
 }
@@ -843,33 +850,26 @@ private fun TimelineItem(
    --------------------------------------------------------- */
 
 @Composable
-private fun FormationLegend(
-    color: Color,
-    label: String
-) {
+private fun Legend(color: Color, label: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Canvas(Modifier.size(10.dp)) {
-            drawCircle(color = color)
+            drawCircle(color)
         }
-
         Spacer(Modifier.width(5.dp))
-
-        Text(
-            label,
-            style = MaterialTheme.typography.labelSmall
-        )
+        Text(label, style = MaterialTheme.typography.labelSmall)
     }
 }
 
 /* ---------------------------------------------------------
-   FORMATION CANVAS
+   SYSTEM CANVAS
    --------------------------------------------------------- */
 
 @Composable
-private fun FormationCanvas(
-    state: FormationState,
+private fun SystemCanvas(
+    state: SystemState,
     modifier: Modifier = Modifier
 ) {
+
     Canvas(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
@@ -878,196 +878,142 @@ private fun FormationCanvas(
 
         val sx = size.width
         val sy = size.height
-        val stage = formationStage(state.elapsedMillis)
 
-        val points = formationPoints(state)
+        val left = sx * 0.07f
+        val right = sx * 0.93f
+        val top = sy * 0.08f
+        val bottom = sy * 0.92f
+
+        val points = systemPattern(state)
 
         val centers = points.map {
             Offset(it.first * sx, it.second * sy)
         }
 
-        val left = sx * 0.07f
-        val right = sx * 0.93f
-        val top = sy * 0.10f
-        val bottom = sy * 0.90f
-
-        // System boundary.
+        // Open System boundary
         drawRoundRect(
-            color = Violet.copy(alpha = 0.40f),
+            color = Violet.copy(alpha = 0.65f),
             topLeft = Offset(left, top),
-            size = androidx.compose.ui.geometry.Size(
-                right - left,
-                bottom - top
-            ),
+            size = Size(right - left, bottom - top),
             cornerRadius = androidx.compose.ui.geometry.CornerRadius(
                 18.dp.toPx()
             ),
-            style = Stroke(width = 1.4.dp.toPx())
+            style = Stroke(width = 1.5.dp.toPx())
         )
 
-        // Four boundary ports.
-        val ports = listOf(
+        // Left and right boundary ports
+        listOf(
             Offset(left, sy * 0.50f),
-            Offset(right, sy * 0.50f),
-            Offset(sx * 0.50f, top),
-            Offset(sx * 0.50f, bottom)
-        )
-
-        ports.forEach { port ->
+            Offset(right, sy * 0.50f)
+        ).forEach { port ->
             drawCircle(
-                Violet.copy(alpha = 0.25f),
-                8.dp.toPx(),
+                Violet.copy(alpha = 0.30f),
+                11.dp.toPx(),
                 port
             )
-
             drawCircle(
-                Violet.copy(alpha = 0.75f),
-                3.dp.toPx(),
+                Violet,
+                4.dp.toPx(),
                 port
             )
         }
 
-        /*
-         * W connections are built progressively.
-         * Only the bonds whose construction progress
-         * has been reached are drawn.
-         */
-        if (stage >= 2) {
+        // Continuous connections: recognizable system pattern
+        for (i in centers.indices) {
 
-            val buildProgress = if (stage == 2) {
-                (
-                    (state.elapsedMillis - STAGE_ONE_MS).toFloat() /
-                        (STAGE_TWO_END_MS - STAGE_ONE_MS)
-                    ).coerceIn(0f, 1f)
-            } else {
-                1f
-            }
+            val next = (i + 1) % centers.size
 
-            val visibleBonds = (
-                buildProgress * (centers.size - 1)
-                ).toInt().coerceIn(0, centers.size - 1)
+            drawLine(
+                color = Cyan.copy(alpha = 0.60f),
+                start = centers[i],
+                end = centers[next],
+                strokeWidth = 1.8.dp.toPx()
+            )
 
-            for (i in 0 until visibleBonds) {
+            if (i % 3 == 0) {
+                val cross = (i + 3) % centers.size
 
                 drawLine(
-                    color = Color(0xFF38BDF8).copy(alpha = 0.85f),
+                    color = Violet.copy(alpha = 0.30f),
                     start = centers[i],
-                    end = centers[i + 1],
-                    strokeWidth = 2.2.dp.toPx()
+                    end = centers[cross],
+                    strokeWidth = 1.dp.toPx()
                 )
-            }
-
-            // Secondary connections appear gradually too.
-            val secondaryCount = (
-                buildProgress * (centers.size / 3)
-                ).toInt()
-
-            for (n in 0 until secondaryCount) {
-                val i = n * 3
-                val j = (i + 2).coerceAtMost(centers.lastIndex)
-
-                if (j > i) {
-                    drawLine(
-                        color = Violet.copy(alpha = 0.42f),
-                        start = centers[i],
-                        end = centers[j],
-                        strokeWidth = 1.2.dp.toPx()
-                    )
-                }
             }
         }
 
-        // All internal particles move.
+        // Internal particles
         state.atoms.forEach { atom ->
 
-            val target = centers[atom.slot]
-            val phase = atom.microPhase + state.step * 0.12f
+            val point = centers[atom.slot]
 
-            val movement = state.internalMovement *
-                (1.2f + (atom.slot % 4) * 0.35f) *
-                density
+            val pulse = sin(atom.phase).toFloat()
 
-            val point = Offset(
-                target.x + sin(phase) * movement,
-                target.y + cos(phase * 1.3f) * movement
+            val radius = (4.0f + pulse * 0.8f).dp.toPx()
+
+            drawCircle(
+                color = Green.copy(alpha = 0.18f),
+                radius = radius * 2f,
+                center = point
             )
 
             drawCircle(
-                Color(0xFF1E293B),
-                8.dp.toPx(),
-                point
-            )
-
-            drawCircle(
-                Green,
-                4.dp.toPx(),
-                point
+                color = Green,
+                radius = radius,
+                center = point
             )
         }
 
-        /*
-         * Boundary entry/exit particles stay inside
-         * the system boundary. No external W pattern.
-         */
-        state.boundaryParticles.forEach { particle ->
+        // Boundary flow particles
+        state.flowParticles.forEach { particle ->
 
             val target = centers[particle.slot]
-            val p = particle.progress.coerceIn(0f, 1f)
+            val progress = particle.progress.coerceIn(0f, 1f)
 
-            val port = when (particle.side) {
-
-                BoundarySide.LEFT -> Offset(
-                    left + 7.dp.toPx(),
-                    target.y.coerceIn(
-                        top + 8.dp.toPx(),
-                        bottom - 8.dp.toPx()
-                    )
-                )
-
-                BoundarySide.RIGHT -> Offset(
-                    right - 7.dp.toPx(),
-                    target.y.coerceIn(
-                        top + 8.dp.toPx(),
-                        bottom - 8.dp.toPx()
-                    )
-                )
-
-                BoundarySide.TOP -> Offset(
-                    target.x.coerceIn(
-                        left + 8.dp.toPx(),
-                        right - 8.dp.toPx()
-                    ),
-                    top + 7.dp.toPx()
-                )
-
-                BoundarySide.BOTTOM -> Offset(
-                    target.x.coerceIn(
-                        left + 8.dp.toPx(),
-                        right - 8.dp.toPx()
-                    ),
-                    bottom - 7.dp.toPx()
-                )
+            val portX = if (particle.side == BoundarySide.LEFT) {
+                left
+            } else {
+                right
             }
 
-            val start = if (particle.entering) port else target
-            val end = if (particle.entering) target else port
+            val outsideX = if (particle.side == BoundarySide.LEFT) {
+                left - 18.dp.toPx()
+            } else {
+                right + 18.dp.toPx()
+            }
+
+            val port = Offset(
+                portX,
+                target.y.coerceIn(top + 8.dp.toPx(), bottom - 8.dp.toPx())
+            )
+
+            val start: Offset
+            val end: Offset
+
+            if (particle.entering) {
+                start = Offset(outsideX, port.y)
+                end = target
+            } else {
+                start = target
+                end = Offset(outsideX, port.y)
+            }
 
             val position = Offset(
-                start.x + (end.x - start.x) * p,
-                start.y + (end.y - start.y) * p
+                start.x + (end.x - start.x) * progress,
+                start.y + (end.y - start.y) * progress
             )
 
             val color = if (particle.entering) Blue else Orange
 
             drawLine(
-                color = color.copy(alpha = 0.25f),
+                color = color.copy(alpha = 0.35f),
                 start = port,
                 end = target,
                 strokeWidth = 1.2.dp.toPx()
             )
 
             drawCircle(
-                color.copy(alpha = 0.18f),
+                color.copy(alpha = 0.20f),
                 9.dp.toPx(),
                 position
             )
