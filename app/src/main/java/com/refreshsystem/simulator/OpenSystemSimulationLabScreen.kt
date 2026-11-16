@@ -1,3 +1,4 @@
+
 package com.refreshsystem.simulator
 
 import androidx.compose.foundation.Canvas
@@ -15,6 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -40,15 +42,19 @@ fun OpenSystemSimulationLabScreen() {
         val features = if (externalOn) {
             List(OpenSystemEngine.PATTERN_SIZE) { i ->
                 val wave = sin((inputPhase + i * 3) * 0.17).toFloat()
-                ((wave + 1f) / 2f * 0.85f + 0.05f).coerceIn(0f, 1f)
+                ((wave + 1f) / 2f * 0.85f + 0.05f)
+                    .coerceIn(0f, 1f)
             }
-        } else null
+        } else {
+            null
+        }
 
         snapshot = engine.step(
             externalFeatures = features,
             internalRefreshEnabled = refreshOn,
             naturalDecayEnabled = decayOn
         )
+
         inputPhase += 1
         cycle += 1
     }
@@ -75,12 +81,14 @@ fun OpenSystemSimulationLabScreen() {
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold
             )
+
             Text(
                 "Open System Simulation Lab",
                 color = Color.White,
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold
             )
+
             Text(
                 "External Information • Internal World • Dynamic Stability",
                 color = LabMuted,
@@ -96,6 +104,7 @@ fun OpenSystemSimulationLabScreen() {
                     .fillMaxWidth()
                     .height(270.dp)
             )
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -104,6 +113,7 @@ fun OpenSystemSimulationLabScreen() {
                 LegendDot("Memory", LabGreen)
                 LegendDot("Connections", Color(0xFF566783))
             }
+
             Text(
                 "16 interacting internal nodes. Node intensity represents current pattern and memory values.",
                 color = LabMuted,
@@ -116,7 +126,9 @@ fun OpenSystemSimulationLabScreen() {
                 "External Information Input",
                 "Environment se nayi information receive karna",
                 externalOn
-            ) { externalOn = it }
+            ) {
+                externalOn = it
+            }
 
             HorizontalDivider(color = Color(0xFF29364D))
 
@@ -124,7 +136,9 @@ fun OpenSystemSimulationLabScreen() {
                 "Internal Refresh",
                 "Internal pattern aur memory ko update karna",
                 refreshOn
-            ) { refreshOn = it }
+            ) {
+                refreshOn = it
+            }
 
             HorizontalDivider(color = Color(0xFF29364D))
 
@@ -132,11 +146,17 @@ fun OpenSystemSimulationLabScreen() {
                 "Natural Decay",
                 "Memory aur pattern ki gradual weakening",
                 decayOn
-            ) { decayOn = it }
+            ) {
+                decayOn = it
+            }
         }
 
         LabPanel("EXPERIMENT CONTROL") {
-            Text("Cycle: $cycle", color = Color.White, fontWeight = FontWeight.Bold)
+            Text(
+                "Cycle: $cycle",
+                color = Color.White,
+                fontWeight = FontWeight.Bold
+            )
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
@@ -145,6 +165,7 @@ fun OpenSystemSimulationLabScreen() {
                 ) {
                     Text(if (running) "Pause" else "Start")
                 }
+
                 OutlinedButton(
                     onClick = { runCycle() },
                     modifier = Modifier.weight(1f)
@@ -160,6 +181,7 @@ fun OpenSystemSimulationLabScreen() {
                 ) {
                     Text("Run 10")
                 }
+
                 OutlinedButton(
                     onClick = {
                         running = false
@@ -182,7 +204,11 @@ fun OpenSystemSimulationLabScreen() {
             MetricBar("Network Strength", snapshot.networkStrength)
             MetricBar("Information Input", snapshot.informationLevel)
 
-            MetricValue("Refresh Cycles", snapshot.refreshCount.toString())
+            MetricValue(
+                "Refresh Cycles",
+                snapshot.refreshCount.toString()
+            )
+
             MetricValue(
                 "Pattern Change",
                 "%.4f".format(snapshot.patternChange)
@@ -190,10 +216,25 @@ fun OpenSystemSimulationLabScreen() {
         }
 
         LabPanel("CURRENT SYSTEM STATE") {
-            StateLine("External Input", if (externalOn) "ACTIVE" else "STOPPED")
-            StateLine("Internal Refresh", if (refreshOn) "ACTIVE" else "STOPPED")
-            StateLine("Natural Decay", if (decayOn) "ACTIVE" else "OFF")
-            StateLine("Simulation", if (running) "RUNNING" else "PAUSED")
+            StateLine(
+                "External Input",
+                if (externalOn) "ACTIVE" else "STOPPED"
+            )
+
+            StateLine(
+                "Internal Refresh",
+                if (refreshOn) "ACTIVE" else "STOPPED"
+            )
+
+            StateLine(
+                "Natural Decay",
+                if (decayOn) "ACTIVE" else "OFF"
+            )
+
+            StateLine(
+                "Simulation",
+                if (running) "RUNNING" else "PAUSED"
+            )
         }
 
         LabPanel("EXPERIMENT NOTE") {
@@ -202,6 +243,7 @@ fun OpenSystemSimulationLabScreen() {
                 color = Color.White,
                 style = MaterialTheme.typography.bodyMedium
             )
+
             Text(
                 "Research model: Ye provisional computational model hai. Metrics model ke mathematical outputs hain, biological consciousness ka proof nahi.",
                 color = LabMuted,
@@ -225,12 +267,16 @@ private fun NetworkView(
             RoundedCornerShape(14.dp)
         )
     ) {
-        val count = 16
+        val count = minOf(16, pattern.size, memory.size)
+
+        if (count == 0) return@Canvas
+
         val center = Offset(size.width / 2f, size.height / 2f)
         val radius = size.minDimension * 0.36f
 
         val points = List(count) { i ->
             val angle = (2.0 * Math.PI * i / count) - Math.PI / 2.0
+
             Offset(
                 center.x + cos(angle).toFloat() * radius,
                 center.y + sin(angle).toFloat() * radius
@@ -239,11 +285,11 @@ private fun NetworkView(
 
         for (i in 0 until count) {
             for (j in i + 1 until count) {
-                val distance = (j - i)
-                if (distance == 1 || distance == 2 || distance == 8) {
+                val distance = j - i
+
+                if (distance == 1 || distance == 2 || distance == count / 2) {
                     val strength = (
-                        (abs(pattern.getOrElse(i) { 0f }) +
-                         abs(pattern.getOrElse(j) { 0f })) / 2f
+                        (abs(pattern[i]) + abs(pattern[j])) / 2f
                     ).coerceIn(0f, 1f)
 
                     drawLine(
@@ -259,8 +305,8 @@ private fun NetworkView(
         }
 
         for (i in 0 until count) {
-            val p = abs(pattern.getOrElse(i) { 0f }).coerceIn(0f, 1f)
-            val m = abs(memory.getOrElse(i) { 0f }).coerceIn(0f, 1f)
+            val p = abs(pattern[i]).coerceIn(0f, 1f)
+            val m = abs(memory[i]).coerceIn(0f, 1f)
             val point = points[i]
 
             drawCircle(
@@ -268,11 +314,13 @@ private fun NetworkView(
                 radius = 13.dp.toPx() + m * 9.dp.toPx(),
                 center = point
             )
+
             drawCircle(
                 color = LabCyan.copy(alpha = 0.35f + p * 0.65f),
                 radius = 5.dp.toPx() + p * 7.dp.toPx(),
                 center = point
             )
+
             drawCircle(
                 color = Color.White.copy(alpha = 0.8f),
                 radius = 2.dp.toPx(),
@@ -285,6 +333,7 @@ private fun NetworkView(
             radius = 25.dp.toPx(),
             center = center
         )
+
         drawCircle(
             color = LabCyan.copy(alpha = 0.8f),
             radius = 5.dp.toPx(),
@@ -300,13 +349,14 @@ private fun LabPanel(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = LabCard),
+        colors = CardDefaults.cardColors(
+            containerColor = LabCard
+        ),
         shape = RoundedCornerShape(18.dp)
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            content = content
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
                 title,
@@ -314,6 +364,7 @@ private fun LabPanel(
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.titleSmall
             )
+
             content()
         }
     }
@@ -331,23 +382,52 @@ private fun LabSwitch(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(Modifier.weight(1f)) {
-            Text(title, color = Color.White, fontWeight = FontWeight.SemiBold)
-            Text(description, color = LabMuted, style = MaterialTheme.typography.bodySmall)
+            Text(
+                title,
+                color = Color.White,
+                fontWeight = FontWeight.SemiBold
+            )
+
+            Text(
+                description,
+                color = LabMuted,
+                style = MaterialTheme.typography.bodySmall
+            )
         }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange
+        )
     }
 }
 
 @Composable
-private fun MetricBar(label: String, value: Float) {
+private fun MetricBar(
+    label: String,
+    value: Float
+) {
+    val safeValue = value.coerceIn(0f, 1f)
+
     Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
             Text(label, color = Color.White)
-            Text("${(value * 100).toInt()}%", color = LabCyan, fontWeight = FontWeight.Bold)
+
+            Text(
+                "${(safeValue * 100).toInt()}%",
+                color = LabCyan,
+                fontWeight = FontWeight.Bold
+            )
         }
+
         LinearProgressIndicator(
-            progress = { value.coerceIn(0f, 1f) },
-            modifier = Modifier.fillMaxWidth().height(7.dp),
+            progress = { safeValue },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(7.dp),
             color = LabCyan,
             trackColor = Color(0xFF2B3850)
         )
@@ -355,27 +435,62 @@ private fun MetricBar(label: String, value: Float) {
 }
 
 @Composable
-private fun MetricValue(label: String, value: String) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+private fun MetricValue(
+    label: String,
+    value: String
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
         Text(label, color = LabMuted)
-        Text(value, color = Color.White, fontWeight = FontWeight.Bold)
-    }
-}
 
-@Composable
-private fun StateLine(label: String, value: String) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, color = LabMuted)
-        Text(value, color = LabGreen, fontWeight = FontWeight.Bold)
-    }
-}
-
-@Composable
-private fun LegendDot(label: String, color: Color) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-        Box(
-            Modifier.size(8.dp).background(color, RoundedCornerShape(50))
+        Text(
+            value,
+            color = Color.White,
+            fontWeight = FontWeight.Bold
         )
-        Text(label, color = LabMuted, style = MaterialTheme.typography.labelSmall)
+    }
+}
+
+@Composable
+private fun StateLine(
+    label: String,
+    value: String
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(label, color = LabMuted)
+
+        Text(
+            value,
+            color = LabGreen,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+private fun LegendDot(
+    label: String,
+    color: Color
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp)
+    ) {
+        Box(
+            Modifier
+                .size(8.dp)
+                .background(color, RoundedCornerShape(50))
+        )
+
+        Text(
+            label,
+            color = LabMuted,
+            style = MaterialTheme.typography.labelSmall
+        )
     }
 }
