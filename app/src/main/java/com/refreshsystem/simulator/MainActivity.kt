@@ -37,8 +37,6 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = Ink
                 ) {
-                    // Old 3D Human System page removed.
-                    // Research Labs is now the main screen.
                     ResearchHomeScreen()
                 }
             }
