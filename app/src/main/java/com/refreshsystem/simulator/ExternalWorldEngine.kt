@@ -6,11 +6,9 @@ import kotlin.random.Random
 /**
  * EXTERNAL WORLD ENGINE
  *
- * Creates a repeatable simulated environment.
- * The Open System can observe events when external input is ON.
- *
- * This is a provisional research model, not a model of the
- * full complexity of the real human environment.
+ * Provisional Open System simulation.
+ * External Input, Internal Refresh and Natural Decay
+ * are treated as three independent processes.
  */
 
 data class WorldEvent(
@@ -22,6 +20,7 @@ data class WorldEvent(
 data class ExternalWorldState(
     val cycle: Int = 0,
     val externalInputEnabled: Boolean = true,
+    val naturalDecayEnabled: Boolean = false,
     val observedEvents: Int = 0,
     val lastObservedEvent: WorldEvent? = null,
     val eventHistory: List<WorldEvent> = emptyList(),
@@ -33,62 +32,18 @@ object ExternalWorldEngine {
 
     private const val MAX_EVENT_HISTORY = 100
 
-    /**
-     * Simulated events from the environment.
-     * Related events share context keys.
-     */
     fun defaultEvents(): List<WorldEvent> {
         return listOf(
-            WorldEvent(
-                1,
-                "daily_life",
-                "A person wakes up in the morning."
-            ),
-            WorldEvent(
-                2,
-                "daily_life",
-                "The person observes sunlight and the surroundings."
-            ),
-            WorldEvent(
-                3,
-                "daily_life",
-                "The person eats breakfast."
-            ),
-            WorldEvent(
-                4,
-                "social",
-                "The person meets another person."
-            ),
-            WorldEvent(
-                5,
-                "social",
-                "A conversation takes place."
-            ),
-            WorldEvent(
-                6,
-                "environment",
-                "Rain begins outside."
-            ),
-            WorldEvent(
-                7,
-                "environment",
-                "The temperature becomes cooler."
-            ),
-            WorldEvent(
-                8,
-                "past_experience",
-                "A familiar place is observed again."
-            ),
-            WorldEvent(
-                9,
-                "daily_life",
-                "The person travels to another location."
-            ),
-            WorldEvent(
-                10,
-                "other",
-                "An unexpected sound is heard."
-            )
+            WorldEvent(1, "daily_life", "A person wakes up in the morning."),
+            WorldEvent(2, "daily_life", "The person observes sunlight and the surroundings."),
+            WorldEvent(3, "daily_life", "The person eats breakfast."),
+            WorldEvent(4, "social", "The person meets another person."),
+            WorldEvent(5, "social", "A conversation takes place."),
+            WorldEvent(6, "environment", "Rain begins outside."),
+            WorldEvent(7, "environment", "The temperature becomes cooler."),
+            WorldEvent(8, "past_experience", "A familiar place is observed again."),
+            WorldEvent(9, "daily_life", "The person travels to another location."),
+            WorldEvent(10, "other", "An unexpected sound is heard.")
         )
     }
 
@@ -99,25 +54,20 @@ object ExternalWorldEngine {
     /**
      * One simulation cycle.
      *
-     * External ON:
-     *   A world event enters the system as information.
+     * 1. External observation
+     * 2. Internal Refresh
+     * 3. Natural Decay
      *
-     * External OFF:
-     *   No new external event enters the system.
-     *
-     * Internal Refresh ON:
-     *   Existing internal records pass through the
-     *   provisional memory refresh process.
-     *
-     * Internal Refresh OFF:
-     *   No memory refresh is performed.
+     * Each process can be independently enabled or disabled.
      */
+
     fun step(
         state: ExternalWorldState,
         externalInputEnabled: Boolean,
         internalRefreshEnabled: Boolean,
         seed: Int = 42,
-        events: List<WorldEvent> = defaultEvents()
+        events: List<WorldEvent> = defaultEvents(),
+        naturalDecayEnabled: Boolean = false
     ): ExternalWorldState {
 
         require(events.isNotEmpty()) {
@@ -131,7 +81,7 @@ object ExternalWorldEngine {
         var observedCount = state.observedEvents
         var history = state.eventHistory
 
-        // 1. External observation
+        // 1. External Observation
         if (externalInputEnabled) {
 
             val random = Random(seed + nextCycle)
@@ -153,7 +103,7 @@ object ExternalWorldEngine {
             ).takeLast(MAX_EVENT_HISTORY)
         }
 
-        // 2. Internal memory refresh
+        // 2. Internal Refresh
         if (internalRefreshEnabled) {
 
             memory = InternalMemoryEngine.refresh(
@@ -161,24 +111,50 @@ object ExternalWorldEngine {
             )
         }
 
-        // 3. Status
+        // 3. Natural Decay
+        if (naturalDecayEnabled) {
+
+            memory = InternalMemoryEngine.applyNaturalDecay(
+                state = memory
+            )
+        }
+
+        // 4. Simulation Status
         val status = when {
-            externalInputEnabled && internalRefreshEnabled ->
+            externalInputEnabled &&
+                internalRefreshEnabled &&
+                naturalDecayEnabled ->
+                "External input, internal refresh and natural decay are active."
+
+            externalInputEnabled &&
+                internalRefreshEnabled ->
                 "External observation and internal refresh are active."
 
-            externalInputEnabled && !internalRefreshEnabled ->
-                "External information is entering. Internal refresh is OFF."
+            externalInputEnabled &&
+                naturalDecayEnabled ->
+                "External input and natural decay are active."
 
-            !externalInputEnabled && internalRefreshEnabled ->
+            externalInputEnabled ->
+                "External information is entering. Internal refresh and decay are OFF."
+
+            internalRefreshEnabled &&
+                naturalDecayEnabled ->
+                "External input is OFF. Internal refresh and natural decay are active."
+
+            internalRefreshEnabled ->
                 "External input is OFF. Internal refresh continues."
 
+            naturalDecayEnabled ->
+                "External input is OFF. Natural memory decay is active."
+
             else ->
-                "External input and internal refresh are both OFF."
+                "External input, internal refresh and natural decay are all OFF."
         }
 
         return state.copy(
             cycle = nextCycle,
             externalInputEnabled = externalInputEnabled,
+            naturalDecayEnabled = naturalDecayEnabled,
             observedEvents = observedCount,
             lastObservedEvent = lastEvent,
             eventHistory = history,
@@ -190,6 +166,7 @@ object ExternalWorldEngine {
     /**
      * Retrieve stored information using a context cue.
      */
+
     fun retrieveMemory(
         state: ExternalWorldState,
         cue: String
@@ -204,6 +181,7 @@ object ExternalWorldEngine {
     /**
      * Get current memory measurements.
      */
+
     fun getMemoryMetrics(
         state: ExternalWorldState
     ): InternalMemoryMetrics {
@@ -214,8 +192,9 @@ object ExternalWorldEngine {
     }
 
     /**
-     * Reset the complete external-world experiment.
+     * Reset the complete experiment.
      */
+
     fun reset(): ExternalWorldState {
         return createInitialState()
     }
