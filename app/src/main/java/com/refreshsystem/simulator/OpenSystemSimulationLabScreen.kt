@@ -44,6 +44,13 @@ private data class ComparisonResult(
     val network: Float
 )
 
+private data class ComparisonCondition(
+    val name: String,
+    val refreshEnabled: Boolean,
+    val decayEnabled: Boolean,
+    val externalEnabled: Boolean
+)
+
 @Composable
 fun OpenSystemSimulationLabScreen() {
 
@@ -67,6 +74,7 @@ fun OpenSystemSimulationLabScreen() {
     }
 
     fun runCycle() {
+
         val features = if (externalOn) {
             List(OpenSystemEngine.PATTERN_SIZE) { i ->
                 val wave = sin((inputPhase + i * 3) * 0.17).toFloat()
@@ -100,22 +108,36 @@ fun OpenSystemSimulationLabScreen() {
     }
 
     fun runComparison() {
+
         val conditions = listOf(
-            Triple("A: Refresh ON / Decay OFF", false, true) to false,
-            Triple("B: Refresh OFF / Decay OFF", false, false) to false,
-            Triple("C: Refresh ON / Decay ON", true, true) to false,
-            Triple("D: External ON / Refresh ON", false, true) to true
+            ComparisonCondition(
+                "A: Refresh ON / Decay OFF",
+                true, false, false
+            ),
+            ComparisonCondition(
+                "B: Refresh OFF / Decay OFF",
+                false, false, false
+            ),
+            ComparisonCondition(
+                "C: Refresh ON / Decay ON",
+                true, true, false
+            ),
+            ComparisonCondition(
+                "D: External ON / Refresh ON",
+                true, false, true
+            )
         )
 
         val results = mutableListOf<ComparisonResult>()
 
-        conditions.forEach { (condition, externalEnabled) ->
+        conditions.forEach { condition ->
 
             val testEngine = OpenSystemEngine()
             var testSnapshot = testEngine.getSnapshot()
 
             // Common training phase: 40 cycles
             repeat(40) { i ->
+
                 val trainingInput =
                     List(OpenSystemEngine.PATTERN_SIZE) { n ->
                         (
@@ -134,7 +156,7 @@ fun OpenSystemSimulationLabScreen() {
             // Test phase: 80 cycles
             repeat(80) { i ->
 
-                val testInput = if (externalEnabled) {
+                val testInput = if (condition.externalEnabled) {
                     List(OpenSystemEngine.PATTERN_SIZE) { n ->
                         (
                             (sin((i + 40 + n * 3) * 0.17) + 1.0) /
@@ -147,15 +169,14 @@ fun OpenSystemSimulationLabScreen() {
 
                 testSnapshot = testEngine.step(
                     externalFeatures = testInput,
-                    internalRefreshEnabled = condition.first.third,
-                    naturalDecayEnabled = condition.first.first
+                    internalRefreshEnabled = condition.refreshEnabled,
+                    naturalDecayEnabled = condition.decayEnabled
                 )
             }
 
             results.add(
                 ComparisonResult(
-                    name = condition.first.let { it.toString() }
-                        .substringBefore(","),
+                    name = condition.name,
                     stability = testSnapshot.dynamicStability,
                     memory = testSnapshot.memoryRetention,
                     continuity = testSnapshot.identityContinuity,
@@ -184,6 +205,7 @@ fun OpenSystemSimulationLabScreen() {
     ) {
 
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+
             Text(
                 "REFRESH SYSTEM",
                 color = LabCyan,
@@ -237,7 +259,9 @@ fun OpenSystemSimulationLabScreen() {
                 "External Information Input",
                 "Environment se nayi information receive karna",
                 externalOn
-            ) { externalOn = it }
+            ) {
+                externalOn = it
+            }
 
             HorizontalDivider(color = Color(0xFF29364D))
 
@@ -245,7 +269,9 @@ fun OpenSystemSimulationLabScreen() {
                 "Internal Refresh",
                 "Internal pattern aur memory ko update karna",
                 refreshOn
-            ) { refreshOn = it }
+            ) {
+                refreshOn = it
+            }
 
             HorizontalDivider(color = Color(0xFF29364D))
 
@@ -253,7 +279,9 @@ fun OpenSystemSimulationLabScreen() {
                 "Natural Decay",
                 "Memory aur pattern ki gradual weakening",
                 decayOn
-            ) { decayOn = it }
+            ) {
+                decayOn = it
+            }
         }
 
         LabPanel("EXPERIMENT CONTROL") {
@@ -265,6 +293,7 @@ fun OpenSystemSimulationLabScreen() {
             )
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+
                 Button(
                     onClick = { running = !running },
                     modifier = Modifier.weight(1f)
@@ -317,6 +346,7 @@ fun OpenSystemSimulationLabScreen() {
             history.takeLast(10).asReversed().forEach { record ->
 
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+
                     Text(
                         "Cycle ${record.cycle} • Input ${if (record.input) "ON" else "OFF"} • Refresh ${if (record.refresh) "ON" else "OFF"} • Decay ${if (record.decay) "ON" else "OFF"}",
                         color = Color.White,
@@ -359,6 +389,7 @@ fun OpenSystemSimulationLabScreen() {
             comparison.forEach { result ->
 
                 Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+
                     Text(
                         result.name,
                         color = LabCyan,
@@ -456,7 +487,9 @@ private fun NetworkView(
             RoundedCornerShape(14.dp)
         )
     ) {
+
         val count = minOf(16, pattern.size, memory.size)
+
         if (count == 0) return@Canvas
 
         val center = Offset(size.width / 2f, size.height / 2f)
@@ -473,9 +506,11 @@ private fun NetworkView(
 
         for (i in 0 until count) {
             for (j in i + 1 until count) {
+
                 val distance = j - i
 
                 if (distance == 1 || distance == 2 || distance == count / 2) {
+
                     val strength = (
                         (abs(pattern[i]) + abs(pattern[j])) / 2f
                     ).coerceIn(0f, 1f)
@@ -493,6 +528,7 @@ private fun NetworkView(
         }
 
         for (i in 0 until count) {
+
             val p = abs(pattern[i]).coerceIn(0f, 1f)
             val m = abs(memory[i]).coerceIn(0f, 1f)
             val point = points[i]
@@ -537,7 +573,9 @@ private fun LabPanel(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = LabCard),
+        colors = CardDefaults.cardColors(
+            containerColor = LabCard
+        ),
         shape = RoundedCornerShape(18.dp)
     ) {
         Column(
@@ -550,6 +588,7 @@ private fun LabPanel(
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.titleSmall
             )
+
             content()
         }
     }
@@ -567,11 +606,13 @@ private fun LabSwitch(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(Modifier.weight(1f)) {
+
             Text(
                 title,
                 color = Color.White,
                 fontWeight = FontWeight.SemiBold
             )
+
             Text(
                 description,
                 color = LabMuted,
@@ -587,15 +628,20 @@ private fun LabSwitch(
 }
 
 @Composable
-private fun MetricBar(label: String, value: Float) {
+private fun MetricBar(
+    label: String,
+    value: Float
+) {
     val safeValue = value.coerceIn(0f, 1f)
 
     Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(label, color = Color.White)
+
             Text(
                 "${(safeValue * 100).toInt()}%",
                 color = LabCyan,
@@ -615,12 +661,16 @@ private fun MetricBar(label: String, value: Float) {
 }
 
 @Composable
-private fun MetricValue(label: String, value: String) {
+private fun MetricValue(
+    label: String,
+    value: String
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(label, color = LabMuted)
+
         Text(
             value,
             color = Color.White,
@@ -630,12 +680,16 @@ private fun MetricValue(label: String, value: String) {
 }
 
 @Composable
-private fun StateLine(label: String, value: String) {
+private fun StateLine(
+    label: String,
+    value: String
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(label, color = LabMuted)
+
         Text(
             value,
             color = LabGreen,
@@ -645,7 +699,10 @@ private fun StateLine(label: String, value: String) {
 }
 
 @Composable
-private fun LegendDot(label: String, color: Color) {
+private fun LegendDot(
+    label: String,
+    color: Color
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(5.dp)
