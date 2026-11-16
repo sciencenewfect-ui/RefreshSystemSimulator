@@ -88,6 +88,7 @@ fun RobotWorldScreen() {
             style = MaterialTheme.typography.bodySmall
         )
 
+        // 1. Observation Panel
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
@@ -102,24 +103,57 @@ fun RobotWorldScreen() {
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    "1. Camera Observation",
+                    "1. Camera Observation Demo",
                     fontWeight = FontWeight.Bold,
                     color = RobotCyan
                 )
 
                 Text(
-                    "कैमरा चालू करने पर ऐप चेहरे और दृश्य के कुछ labels पहचानने की कोशिश करेगा।",
+                    "यह अभी observation demo है। वास्तविक camera और face detection integration इसमें शामिल नहीं है।",
                     color = Color.White
                 )
 
-                CameraPanel(
-                    enabled = cameraEnabled,
-                    onEnabledChange = { cameraEnabled = it },
-                    onObservation = { result, faces ->
-                        observation = result
-                        faceCount = faces
-                        refreshSystem()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            cameraEnabled = !cameraEnabled
+                            if (!cameraEnabled) {
+                                observation = "Observation demo बंद है।"
+                            } else {
+                                observation = "Observation demo चालू है।"
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            if (cameraEnabled) "Stop Demo"
+                            else "Start Demo"
+                        )
                     }
+
+                    OutlinedButton(
+                        onClick = {
+                            if (cameraEnabled) {
+                                observation = "एक sample external observation प्राप्त हुआ।"
+                                faceCount = 1
+                                environment = (environment + 0.1f)
+                                    .coerceIn(0f, 1f)
+                                refreshSystem()
+                            }
+                        },
+                        enabled = cameraEnabled,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Observe")
+                    }
+                }
+
+                Text(
+                    text = "Status: ${if (cameraEnabled) "Active" else "Inactive"}",
+                    color = RobotCyan
                 )
 
                 Text(
@@ -129,12 +163,13 @@ fun RobotWorldScreen() {
                 )
 
                 Text(
-                    text = "Detected faces: $faceCount",
+                    text = "Demo face count: $faceCount",
                     color = Color.White
                 )
             }
         }
 
+        // 2. Refresh System
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
@@ -203,6 +238,9 @@ fun RobotWorldScreen() {
                             internalState = 0.5f
                             stability = 0.75f
                             environment = 0.5f
+                            faceCount = 0
+                            cameraEnabled = false
+                            observation = "अभी कोई नया observation नहीं है।"
                         },
                         modifier = Modifier.weight(1f)
                     ) {
@@ -212,6 +250,7 @@ fun RobotWorldScreen() {
             }
         }
 
+        // 3. Information Retention
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
@@ -232,7 +271,7 @@ fun RobotWorldScreen() {
                 )
 
                 Text(
-                    "यहाँ तुम जानकारी जोड़ सकते हो। यह इस स्क्रीन की अस्थायी memory list में रहेगी।",
+                    "यहाँ जानकारी जोड़ सकते हो। यह इस स्क्रीन की अस्थायी memory list में रहेगी।",
                     color = RobotMuted
                 )
 
@@ -241,7 +280,9 @@ fun RobotWorldScreen() {
                     onValueChange = { memoryInput = it },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("जानकारी लिखें") },
-                    placeholder = { Text("उदाहरण: सामने एक चेहरा दिखा") },
+                    placeholder = {
+                        Text("उदाहरण: सामने एक चेहरा दिखा")
+                    },
                     singleLine = false
                 )
 
@@ -290,7 +331,7 @@ fun RobotWorldScreen() {
         Spacer(Modifier.height(4.dp))
 
         Text(
-            text = "महत्वपूर्ण: यह Refresh Theory पर आधारित एक प्रयोगात्मक simulation है। Stability Score और memory list चेतना का वैज्ञानिक प्रमाण नहीं हैं। Memory list अभी ऐप बंद होने पर स्थायी रूप से सुरक्षित नहीं रहती।",
+            text = "महत्वपूर्ण: यह Refresh Theory पर आधारित प्रयोगात्मक simulation है। Stability Score और memory list चेतना का वैज्ञानिक प्रमाण नहीं हैं। Memory list अभी ऐप बंद होने पर स्थायी रूप से सुरक्षित नहीं रहती।",
             color = RobotMuted,
             style = MaterialTheme.typography.bodySmall
         )
