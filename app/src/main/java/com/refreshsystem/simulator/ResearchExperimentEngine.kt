@@ -17,7 +17,9 @@ data class ResearchResult(
     val finalContinuity: Float,
     val finalNetwork: Float,
     val meanStability: Float,
-    val meanMemory: Float
+    val meanMemory: Float,
+    val trainingEndMemory: Float,
+    val memoryCurve: List<Float>
 )
 
 data class ResearchCycle(
@@ -54,7 +56,7 @@ object ResearchExperimentEngine {
 
     private fun inputFor(cycle: Int, seed: Int): List<Float> =
         List(OpenSystemEngine.PATTERN_SIZE) { i ->
-            val phase = (cycle * 0.17 + i * 0.31 + seed * 0.013)
+            val phase = cycle * 0.17 + i * 0.31 + seed * 0.013
             kotlin.math.sin(phase).toFloat().coerceIn(-1f, 1f)
         }
 
@@ -99,9 +101,13 @@ object ResearchExperimentEngine {
                     )
                 }
 
+                // Memory baseline immediately after training.
+                val trainingEndMemory = current.memoryRetention
+
                 // PHASE 2: CONDITION-SPECIFIC TEST.
                 val stabilityValues = mutableListOf<Float>()
                 val memoryValues = mutableListOf<Float>()
+                val memoryCurve = mutableListOf<Float>()
 
                 repeat(TEST_CYCLES) { index ->
                     val testCycle = TRAINING_CYCLES + index
@@ -120,6 +126,7 @@ object ResearchExperimentEngine {
 
                     stabilityValues.add(current.dynamicStability)
                     memoryValues.add(current.memoryRetention)
+                    memoryCurve.add(current.memoryRetention)
 
                     records.add(
                         ResearchCycle(
@@ -148,7 +155,9 @@ object ResearchExperimentEngine {
                         finalContinuity = current.identityContinuity,
                         finalNetwork = current.networkStrength,
                         meanStability = stabilityValues.average().toFloat(),
-                        meanMemory = memoryValues.average().toFloat()
+                        meanMemory = memoryValues.average().toFloat(),
+                        trainingEndMemory = trainingEndMemory,
+                        memoryCurve = memoryCurve.toList()
                     )
                 )
             }
@@ -183,17 +192,24 @@ object ResearchExperimentEngine {
         out.appendLine(
             "RESULT_TYPE,SEED,CONDITION_ID,CONDITION," +
                 "FINAL_STABILITY,FINAL_MEMORY,FINAL_CONTINUITY," +
-                "FINAL_NETWORK,MEAN_STABILITY,MEAN_MEMORY"
+                "FINAL_NETWORK,MEAN_STABILITY,MEAN_MEMORY," +
+                "TRAINING_END_MEMORY,MEMORY_RETENTION_RATIO"
         )
 
         results.forEach {
             val safeName = it.condition.name.replace(",", ";")
+            val ratio = if (it.trainingEndMemory > 0.000001f) {
+                it.finalMemory / it.trainingEndMemory
+            } else {
+                null
+            }
 
             out.appendLine(
                 "RESULT,${it.seed},${it.condition.id},$safeName," +
                     "${it.finalStability},${it.finalMemory}," +
                     "${it.finalContinuity},${it.finalNetwork}," +
-                    "${it.meanStability},${it.meanMemory}"
+                    "${it.meanStability},${it.meanMemory}," +
+                    "${it.trainingEndMemory},${ratio ?: "N/A"}"
             )
         }
 
