@@ -1,6 +1,7 @@
 
 package com.refreshsystem.simulator
 
+import android.view.View
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -10,8 +11,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -29,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 
 private val ExperimentBackground = Color(0xFF10131C)
 private val ExperimentPanel = Color(0xFF1A2030)
@@ -42,25 +44,12 @@ fun ExternalWorldExperimentScreen() {
         mutableStateOf(ExternalWorldEngine.createInitialState())
     }
 
-    var externalEnabled by remember {
-        mutableStateOf(true)
-    }
+    var externalEnabled by remember { mutableStateOf(true) }
+    var internalRefreshEnabled by remember { mutableStateOf(true) }
+    var naturalDecayEnabled by remember { mutableStateOf(false) }
+    var searchCue by remember { mutableStateOf("") }
 
-    var internalRefreshEnabled by remember {
-        mutableStateOf(true)
-    }
-
-    var naturalDecayEnabled by remember {
-        mutableStateOf(false)
-    }
-
-    var searchCue by remember {
-        mutableStateOf("")
-    }
-
-    val metrics = ExternalWorldEngine.getMemoryMetrics(
-        simulationState
-    )
+    val metrics = ExternalWorldEngine.getMemoryMetrics(simulationState)
 
     val retrievedMemories = ExternalWorldEngine.retrieveMemory(
         state = simulationState,
@@ -98,9 +87,51 @@ fun ExternalWorldExperimentScreen() {
             color = ExperimentMuted
         )
 
-        // 1. SYSTEM INPUT CONTROLS
+        // 1. HUMAN OPEN SYSTEM 3D MODEL
 
-        ExperimentCard(title = "1. System Input Controls") {
+        ExperimentCard(title = "1. Human Open System 3D Model") {
+
+            Text(
+                text = "Interactive human system visualization",
+                color = ExperimentMuted
+            )
+
+            AndroidView(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(540.dp),
+                factory = { context ->
+                    HumanOpenSystem3DView(context).apply {
+                        updateSignals(
+                            camera = false,
+                            microphone = false,
+                            audio = 0f,
+                            stability = metrics.averageRecordStrength
+                                .coerceIn(0f, 1f)
+                        )
+                    }
+                },
+                update = { view ->
+                    view.updateSignals(
+                        camera = false,
+                        microphone = false,
+                        audio = 0f,
+                        stability = metrics.averageRecordStrength
+                            .coerceIn(0f, 1f)
+                    )
+                }
+            )
+
+            Text(
+                text = "Drag the model to rotate it. Brain, heart, lungs, memory region and refresh particles are conceptual visual elements.",
+                color = ExperimentMuted,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+
+        // 2. SYSTEM INPUT CONTROLS
+
+        ExperimentCard(title = "2. System Input Controls") {
 
             ControlRow(
                 title = "External Input",
@@ -113,18 +144,14 @@ fun ExternalWorldExperimentScreen() {
                 title = "Internal Refresh",
                 description = "Existing memory ka refresh process",
                 checked = internalRefreshEnabled,
-                onCheckedChange = {
-                    internalRefreshEnabled = it
-                }
+                onCheckedChange = { internalRefreshEnabled = it }
             )
 
             ControlRow(
                 title = "Natural Decay",
                 description = "Memory strength ka natural reduction",
                 checked = naturalDecayEnabled,
-                onCheckedChange = {
-                    naturalDecayEnabled = it
-                }
+                onCheckedChange = { naturalDecayEnabled = it }
             )
 
             Text(
@@ -133,23 +160,19 @@ fun ExternalWorldExperimentScreen() {
             )
 
             Text(
-                "Internal Refresh: ${
-                    if (internalRefreshEnabled) "ON" else "OFF"
-                }",
+                "Internal Refresh: ${if (internalRefreshEnabled) "ON" else "OFF"}",
                 color = ExperimentCyan
             )
 
             Text(
-                "Natural Decay: ${
-                    if (naturalDecayEnabled) "ON" else "OFF"
-                }",
+                "Natural Decay: ${if (naturalDecayEnabled) "ON" else "OFF"}",
                 color = ExperimentCyan
             )
         }
 
-        // 2. SIMULATION CONTROL
+        // 3. SIMULATION CONTROL
 
-        ExperimentCard(title = "2. Simulation Control") {
+        ExperimentCard(title = "3. Simulation Control") {
 
             Text(
                 "Simulation Cycle: ${simulationState.cycle}",
@@ -171,9 +194,7 @@ fun ExternalWorldExperimentScreen() {
 
             OutlinedButton(
                 onClick = {
-                    repeat(10) {
-                        runOneCycle()
-                    }
+                    repeat(10) { runOneCycle() }
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -194,9 +215,9 @@ fun ExternalWorldExperimentScreen() {
             }
         }
 
-        // 3. EXTERNAL WORLD
+        // 4. EXTERNAL WORLD
 
-        ExperimentCard(title = "3. External World") {
+        ExperimentCard(title = "4. External World") {
 
             MetricRow(
                 "Total Observed Events",
@@ -239,58 +260,36 @@ fun ExternalWorldExperimentScreen() {
             }
         }
 
-        // 4. INTERNAL MEMORY MEASUREMENTS
+        // 5. INTERNAL MEMORY MEASUREMENTS
 
-        ExperimentCard(title = "4. Internal Memory Measurements") {
+        ExperimentCard(title = "5. Internal Memory Measurements") {
 
             MetricRow("Memory Records", metrics.totalRecords)
-
-            MetricRow(
-                "Total Information Units",
-                metrics.totalTokens
-            )
-
-            MetricRow(
-                "Unique Information Units",
-                metrics.uniqueInformationUnits
-            )
-
-            MetricRow(
-                "Information Transfers",
-                metrics.totalTransfers
-            )
-
+            MetricRow("Total Information Units", metrics.totalTokens)
+            MetricRow("Unique Information Units", metrics.uniqueInformationUnits)
+            MetricRow("Information Transfers", metrics.totalTransfers)
             MetricRow("Total Inputs", metrics.totalInputs)
-
             MetricRow("Total Refreshes", metrics.totalRefreshes)
-
-            MetricRow(
-                "Total Decay Cycles",
-                metrics.totalDecayCycles
-            )
+            MetricRow("Total Decay Cycles", metrics.totalDecayCycles)
 
             Spacer(Modifier.height(4.dp))
 
             Text(
-                "Average Memory Strength: ${
-                    (metrics.averageRecordStrength * 100).toInt()
-                }%",
+                "Average Memory Strength: ${(metrics.averageRecordStrength * 100).toInt()}%",
                 color = ExperimentCyan,
                 fontWeight = FontWeight.Bold
             )
         }
 
-        // 5. MEMORY RETRIEVAL
+        // 6. MEMORY RETRIEVAL
 
-        ExperimentCard(title = "5. Memory Retrieval") {
+        ExperimentCard(title = "6. Memory Retrieval") {
 
             OutlinedTextField(
                 value = searchCue,
                 onValueChange = { searchCue = it },
                 modifier = Modifier.fillMaxWidth(),
-                label = {
-                    Text("Search memory")
-                },
+                label = { Text("Search memory") },
                 placeholder = {
                     Text("Example: morning, rain, person")
                 },
@@ -311,14 +310,10 @@ fun ExternalWorldExperimentScreen() {
                     )
                 } else {
                     retrievedMemories.forEach { memory ->
-
                         Column(
                             verticalArrangement = Arrangement.spacedBy(3.dp)
                         ) {
-                            Text(
-                                memory.content,
-                                color = Color.White
-                            )
+                            Text(memory.content, color = Color.White)
 
                             Text(
                                 "Strength: ${(memory.strength * 100).toInt()}%",
@@ -352,19 +347,14 @@ private fun ControlRow(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Column(
-            modifier = Modifier.weight(1f)
-        ) {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 title,
                 color = Color.White,
                 fontWeight = FontWeight.Bold
             )
 
-            Text(
-                description,
-                color = ExperimentMuted
-            )
+            Text(description, color = ExperimentMuted)
         }
 
         Switch(
