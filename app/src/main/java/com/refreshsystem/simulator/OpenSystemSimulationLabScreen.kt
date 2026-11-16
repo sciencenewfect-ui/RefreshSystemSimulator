@@ -26,8 +26,27 @@ private val LabCyan = Color(0xFF52E5F2)
 private val LabGreen = Color(0xFF62E6A5)
 private val LabMuted = Color(0xFF9EABC2)
 
+private data class CycleRecord(
+    val cycle: Int,
+    val stability: Float,
+    val memory: Float,
+    val continuity: Float,
+    val input: Boolean,
+    val refresh: Boolean,
+    val decay: Boolean
+)
+
+private data class ComparisonResult(
+    val name: String,
+    val stability: Float,
+    val memory: Float,
+    val continuity: Float,
+    val network: Float
+)
+
 @Composable
 fun OpenSystemSimulationLabScreen() {
+
     val engine = remember { OpenSystemEngine() }
     var snapshot by remember { mutableStateOf(engine.getSnapshot()) }
 
@@ -35,8 +54,17 @@ fun OpenSystemSimulationLabScreen() {
     var refreshOn by remember { mutableStateOf(true) }
     var decayOn by remember { mutableStateOf(false) }
     var running by remember { mutableStateOf(false) }
+
     var cycle by remember { mutableIntStateOf(0) }
     var inputPhase by remember { mutableIntStateOf(0) }
+
+    var history by remember {
+        mutableStateOf<List<CycleRecord>>(emptyList())
+    }
+
+    var comparison by remember {
+        mutableStateOf<List<ComparisonResult>>(emptyList())
+    }
 
     fun runCycle() {
         val features = if (externalOn) {
@@ -55,8 +83,88 @@ fun OpenSystemSimulationLabScreen() {
             naturalDecayEnabled = decayOn
         )
 
-        inputPhase += 1
-        cycle += 1
+        inputPhase++
+        cycle++
+
+        history = (
+            history + CycleRecord(
+                cycle = cycle,
+                stability = snapshot.dynamicStability,
+                memory = snapshot.memoryRetention,
+                continuity = snapshot.identityContinuity,
+                input = externalOn,
+                refresh = refreshOn,
+                decay = decayOn
+            )
+        ).takeLast(60)
+    }
+
+    fun runComparison() {
+        val conditions = listOf(
+            Triple("A: Refresh ON / Decay OFF", false, true) to false,
+            Triple("B: Refresh OFF / Decay OFF", false, false) to false,
+            Triple("C: Refresh ON / Decay ON", true, true) to false,
+            Triple("D: External ON / Refresh ON", false, true) to true
+        )
+
+        val results = mutableListOf<ComparisonResult>()
+
+        conditions.forEach { (condition, externalEnabled) ->
+
+            val testEngine = OpenSystemEngine()
+            var testSnapshot = testEngine.getSnapshot()
+
+            // Common training phase: 40 cycles
+            repeat(40) { i ->
+                val trainingInput =
+                    List(OpenSystemEngine.PATTERN_SIZE) { n ->
+                        (
+                            (sin((i + n * 3) * 0.17) + 1.0) /
+                                2.0 * 0.85 + 0.05
+                        ).toFloat().coerceIn(0f, 1f)
+                    }
+
+                testSnapshot = testEngine.step(
+                    externalFeatures = trainingInput,
+                    internalRefreshEnabled = true,
+                    naturalDecayEnabled = false
+                )
+            }
+
+            // Test phase: 80 cycles
+            repeat(80) { i ->
+
+                val testInput = if (externalEnabled) {
+                    List(OpenSystemEngine.PATTERN_SIZE) { n ->
+                        (
+                            (sin((i + 40 + n * 3) * 0.17) + 1.0) /
+                                2.0 * 0.85 + 0.05
+                        ).toFloat().coerceIn(0f, 1f)
+                    }
+                } else {
+                    null
+                }
+
+                testSnapshot = testEngine.step(
+                    externalFeatures = testInput,
+                    internalRefreshEnabled = condition.first.third,
+                    naturalDecayEnabled = condition.first.first
+                )
+            }
+
+            results.add(
+                ComparisonResult(
+                    name = condition.first.let { it.toString() }
+                        .substringBefore(","),
+                    stability = testSnapshot.dynamicStability,
+                    memory = testSnapshot.memoryRetention,
+                    continuity = testSnapshot.identityContinuity,
+                    network = testSnapshot.networkStrength
+                )
+            )
+        }
+
+        comparison = results
     }
 
     LaunchedEffect(running, externalOn, refreshOn, decayOn) {
@@ -74,6 +182,7 @@ fun OpenSystemSimulationLabScreen() {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
                 "REFRESH SYSTEM",
@@ -97,6 +206,7 @@ fun OpenSystemSimulationLabScreen() {
         }
 
         LabPanel("SYSTEM NETWORK — INTERNAL WORLD") {
+
             NetworkView(
                 pattern = snapshot.internalPattern,
                 memory = snapshot.memoryState,
@@ -122,13 +232,12 @@ fun OpenSystemSimulationLabScreen() {
         }
 
         LabPanel("SYSTEM CONTROL") {
+
             LabSwitch(
                 "External Information Input",
                 "Environment se nayi information receive karna",
                 externalOn
-            ) {
-                externalOn = it
-            }
+            ) { externalOn = it }
 
             HorizontalDivider(color = Color(0xFF29364D))
 
@@ -136,9 +245,7 @@ fun OpenSystemSimulationLabScreen() {
                 "Internal Refresh",
                 "Internal pattern aur memory ko update karna",
                 refreshOn
-            ) {
-                refreshOn = it
-            }
+            ) { refreshOn = it }
 
             HorizontalDivider(color = Color(0xFF29364D))
 
@@ -146,12 +253,11 @@ fun OpenSystemSimulationLabScreen() {
                 "Natural Decay",
                 "Memory aur pattern ki gradual weakening",
                 decayOn
-            ) {
-                decayOn = it
-            }
+            ) { decayOn = it }
         }
 
         LabPanel("EXPERIMENT CONTROL") {
+
             Text(
                 "Cycle: $cycle",
                 color = Color.White,
@@ -175,6 +281,7 @@ fun OpenSystemSimulationLabScreen() {
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+
                 OutlinedButton(
                     onClick = { repeat(10) { runCycle() } },
                     modifier = Modifier.weight(1f)
@@ -189,6 +296,8 @@ fun OpenSystemSimulationLabScreen() {
                         snapshot = engine.getSnapshot()
                         cycle = 0
                         inputPhase = 0
+                        history = emptyList()
+                        comparison = emptyList()
                     },
                     modifier = Modifier.weight(1f)
                 ) {
@@ -197,7 +306,85 @@ fun OpenSystemSimulationLabScreen() {
             }
         }
 
+        LabPanel("EXPERIMENT HISTORY — LAST 60 CYCLES") {
+
+            Text(
+                "Recorded cycles: ${history.size}",
+                color = LabMuted,
+                style = MaterialTheme.typography.bodySmall
+            )
+
+            history.takeLast(10).asReversed().forEach { record ->
+
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        "Cycle ${record.cycle} • Input ${if (record.input) "ON" else "OFF"} • Refresh ${if (record.refresh) "ON" else "OFF"} • Decay ${if (record.decay) "ON" else "OFF"}",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+
+                    Text(
+                        "Stability ${(record.stability * 100).toInt()}%   Memory ${(record.memory * 100).toInt()}%   Continuity ${(record.continuity * 100).toInt()}%",
+                        color = LabMuted,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+
+                HorizontalDivider(color = Color(0xFF29364D))
+            }
+
+            if (history.isEmpty()) {
+                Text(
+                    "Start simulation to record experimental measurements.",
+                    color = LabMuted
+                )
+            }
+        }
+
+        LabPanel("COMPARATIVE EXPERIMENT") {
+
+            Text(
+                "All conditions receive the same 40-cycle training phase, followed by 80 test cycles.",
+                color = LabMuted,
+                style = MaterialTheme.typography.bodySmall
+            )
+
+            Button(
+                onClick = { runComparison() },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Run 4-condition comparison")
+            }
+
+            comparison.forEach { result ->
+
+                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text(
+                        result.name,
+                        color = LabCyan,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Text(
+                        "Stability ${(result.stability * 100).toInt()}%  •  Memory ${(result.memory * 100).toInt()}%  •  Continuity ${(result.continuity * 100).toInt()}%  •  Network ${(result.network * 100).toInt()}%",
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                HorizontalDivider(color = Color(0xFF29364D))
+            }
+
+            if (comparison.isEmpty()) {
+                Text(
+                    "Run the comparison to measure all four conditions side by side.",
+                    color = LabMuted
+                )
+            }
+        }
+
         LabPanel("LIVE RESEARCH METRICS") {
+
             MetricBar("Dynamic Stability", snapshot.dynamicStability)
             MetricBar("Memory Strength", snapshot.memoryRetention)
             MetricBar("Pattern Continuity", snapshot.identityContinuity)
@@ -216,6 +403,7 @@ fun OpenSystemSimulationLabScreen() {
         }
 
         LabPanel("CURRENT SYSTEM STATE") {
+
             StateLine(
                 "External Input",
                 if (externalOn) "ACTIVE" else "STOPPED"
@@ -238,6 +426,7 @@ fun OpenSystemSimulationLabScreen() {
         }
 
         LabPanel("EXPERIMENT NOTE") {
+
             Text(
                 "Experiment: Internal World ko pehle external information se develop karo. Phir External Input OFF karke observe karo ki internal refresh ke saath pattern aur memory kitni der sustain karte hain. Natural Decay ko independently ON/OFF karke results compare karo.",
                 color = Color.White,
@@ -268,7 +457,6 @@ private fun NetworkView(
         )
     ) {
         val count = minOf(16, pattern.size, memory.size)
-
         if (count == 0) return@Canvas
 
         val center = Offset(size.width / 2f, size.height / 2f)
@@ -349,9 +537,7 @@ private fun LabPanel(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = LabCard
-        ),
+        colors = CardDefaults.cardColors(containerColor = LabCard),
         shape = RoundedCornerShape(18.dp)
     ) {
         Column(
@@ -364,7 +550,6 @@ private fun LabPanel(
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.titleSmall
             )
-
             content()
         }
     }
@@ -387,7 +572,6 @@ private fun LabSwitch(
                 color = Color.White,
                 fontWeight = FontWeight.SemiBold
             )
-
             Text(
                 description,
                 color = LabMuted,
@@ -403,10 +587,7 @@ private fun LabSwitch(
 }
 
 @Composable
-private fun MetricBar(
-    label: String,
-    value: Float
-) {
+private fun MetricBar(label: String, value: Float) {
     val safeValue = value.coerceIn(0f, 1f)
 
     Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -415,7 +596,6 @@ private fun MetricBar(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(label, color = Color.White)
-
             Text(
                 "${(safeValue * 100).toInt()}%",
                 color = LabCyan,
@@ -435,16 +615,12 @@ private fun MetricBar(
 }
 
 @Composable
-private fun MetricValue(
-    label: String,
-    value: String
-) {
+private fun MetricValue(label: String, value: String) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(label, color = LabMuted)
-
         Text(
             value,
             color = Color.White,
@@ -454,16 +630,12 @@ private fun MetricValue(
 }
 
 @Composable
-private fun StateLine(
-    label: String,
-    value: String
-) {
+private fun StateLine(label: String, value: String) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(label, color = LabMuted)
-
         Text(
             value,
             color = LabGreen,
@@ -473,10 +645,7 @@ private fun StateLine(
 }
 
 @Composable
-private fun LegendDot(
-    label: String,
-    color: Color
-) {
+private fun LegendDot(label: String, color: Color) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(5.dp)
