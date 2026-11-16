@@ -50,22 +50,18 @@ data class MemoryPattern(
 )
 
 data class SimulationConfig(
-    // Relative contribution of external and internal inputs.
     val externalInputWeight: Double = 0.75,
     val internalInputWeight: Double = 0.25,
 
-    // Global Dynamic Stability parameters.
     val globalRefreshRate: Double = 0.04,
     val globalDecayRate: Double = 0.01,
 
-    // Memory parameters.
     val sharedMemoryRefreshGain: Double = 0.015,
     val memoryDecayRate: Double = 0.008,
 
     val sharedContinuityGain: Double = 0.012,
     val continuityDecayRate: Double = 0.006,
 
-    // Activation parameters.
     val activationReinforcement: Double = 0.025,
     val randomSelectionWeight: Double = 0.10,
     val contextSelectionWeight: Double = 0.90
@@ -73,7 +69,8 @@ data class SimulationConfig(
 
 data class SimulationInput(
     val condition: ExperimentCondition,
-    val currentContextKey: String
+    val currentContextKey: String,
+    val naturalDecayEnabled: Boolean = true
 )
 
 data class SimulationMetrics(
@@ -86,7 +83,9 @@ data class SimulationMetrics(
     val selectedPatternProbability: Double,
     val externalInput: Double,
     val internalInput: Double,
-    val effectiveInputSupport: Double
+    val effectiveInputSupport: Double,
+    val refreshEnabled: Boolean = true,
+    val naturalDecayEnabled: Boolean = true
 )
 
 data class SimulationState(
@@ -161,10 +160,8 @@ object RefreshSimulationEngine {
             "Memory Pattern list cannot be empty."
         }
 
-        require(
-            state.patterns.map { it.id }.distinct().size ==
-                state.patterns.size
-        ) {
+        require(state.patterns.map { it.id }.distinct().size ==
+            state.patterns.size) {
             "Memory Pattern IDs must be unique."
         }
 
@@ -172,30 +169,45 @@ object RefreshSimulationEngine {
 
         val condition = input.condition
 
-        // 1. Calculate the combined input support.
-        // External and internal inputs belong to the same Refresh process.
+        // 1. Calculate combined input support.
         val effectiveInputSupport = (
             condition.externalInput * config.externalInputWeight +
                 condition.internalInput * config.internalInputWeight
             ).coerceIn(0.0, 1.0)
 
-        // 2. Update Global Dynamic Stability.
-        // Internal-only support is weaker in this provisional model.
-        val stabilityChange = if (condition.refreshEnabled) {
+        // 2. Refresh and Natural Decay are independent.
+        val refreshSupport =
+            if (condition.refreshEnabled) {
+                effectiveInputSupport
+            } else {
+                0.0
+            }
+
+        val decaySupport =
+            if (input.naturalDecayEnabled) {
+                1.0
+            } else {
+                0.0
+            }
+
+        // 3. Update Global Dynamic Stability.
+        val refreshGain =
             config.globalRefreshRate *
-                effectiveInputSupport *
-                (1.0 - state.globalDynamicStability) -
-                config.globalDecayRate *
-                (1.0 - effectiveInputSupport)
-        } else {
-            -config.globalDecayRate
-        }
+                refreshSupport *
+                (1.0 - state.globalDynamicStability)
+
+        val naturalDecay =
+            config.globalDecayRate *
+                decaySupport *
+                state.globalDynamicStability
 
         val newGlobalStability = (
-            state.globalDynamicStability + stabilityChange
+            state.globalDynamicStability +
+                refreshGain -
+                naturalDecay
             ).coerceIn(0.0, 1.0)
 
-        // 3. Calculate activation probabilities.
+        // 4. Calculate activation probabilities.
         val probabilities = calculateProbabilities(
             patterns = state.patterns,
             currentContextKey = input.currentContextKey,
@@ -203,47 +215,56 @@ object RefreshSimulationEngine {
             random = Random(state.randomSeed + state.step)
         )
 
-        // 4. Select one Memory Pattern probabilistically.
+        // 5. Select one Memory Pattern probabilistically.
         val selectedId = selectPattern(
             patterns = state.patterns,
             probabilities = probabilities,
             random = Random(state.randomSeed + state.step + 1000)
         )
 
-        // 5. All patterns participate in shared Refresh.
-        // Selection adds an additional activation effect to one pattern.
-        val sharedRefresh = if (condition.refreshEnabled) {
-            effectiveInputSupport * newGlobalStability
-        } else {
-            0.0
-        }
+        // 6. Shared Refresh affects all patterns.
+        val sharedRefresh =
+            refreshSupport * newGlobalStability
 
         val updatedPatterns = state.patterns.map { pattern ->
 
             val selected = pattern.id == selectedId
 
-            val activationGain = if (selected) {
-                config.activationReinforcement
-            } else {
-                0.0
-            }
+            val activationGain =
+                if (selected && condition.refreshEnabled) {
+                    config.activationReinforcement
+                } else {
+                    0.0
+                }
 
-            val strengthChange =
-                config.sharedMemoryRefreshGain * sharedRefresh -
-                    config.memoryDecayRate * (1.0 - sharedRefresh) +
-                    activationGain
+            val strengthGain =
+                config.sharedMemoryRefreshGain * sharedRefresh
 
-            val continuityChange =
-                config.sharedContinuityGain * sharedRefresh -
-                    config.continuityDecayRate * (1.0 - sharedRefresh)
+            val strengthDecay =
+                config.memoryDecayRate *
+                    decaySupport *
+                    pattern.strength
+
+            val continuityGain =
+                config.sharedContinuityGain * sharedRefresh
+
+            val continuityDecay =
+                config.continuityDecayRate *
+                    decaySupport *
+                    pattern.continuity
 
             pattern.copy(
                 strength = (
-                    pattern.strength + strengthChange
+                    pattern.strength +
+                        strengthGain -
+                        strengthDecay +
+                        activationGain
                     ).coerceIn(0.0, 1.0),
 
                 continuity = (
-                    pattern.continuity + continuityChange
+                    pattern.continuity +
+                        continuityGain -
+                        continuityDecay
                     ).coerceIn(0.0, 1.0),
 
                 activationProbability =
@@ -255,7 +276,7 @@ object RefreshSimulationEngine {
             )
         }
 
-        // 6. Provisional collective Memory Dynamic Stability measure.
+        // 7. Collective Memory Dynamic Stability.
         val averageContinuity =
             updatedPatterns.map { it.continuity }.average()
 
@@ -265,7 +286,7 @@ object RefreshSimulationEngine {
         val selectedProbability =
             probabilities[selectedId] ?: 0.0
 
-        // 7. Save experiment measurements.
+        // 8. Save experiment measurements.
         val metrics = SimulationMetrics(
             step = state.step + 1,
             globalDynamicStability = newGlobalStability,
@@ -277,7 +298,9 @@ object RefreshSimulationEngine {
             selectedPatternProbability = selectedProbability,
             externalInput = condition.externalInput,
             internalInput = condition.internalInput,
-            effectiveInputSupport = effectiveInputSupport
+            effectiveInputSupport = effectiveInputSupport,
+            refreshEnabled = condition.refreshEnabled,
+            naturalDecayEnabled = input.naturalDecayEnabled
         )
 
         return state.copy(
