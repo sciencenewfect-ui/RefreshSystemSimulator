@@ -9,10 +9,10 @@ import java.util.Locale
    ========================================================= */
 
 /*
- * यह Engine सिस्टम की आंतरिक जानकारी को रिकॉर्ड करता है।
- * यह Android Gallery या Photo Storage का उपयोग नहीं करता।
+ * Provisional computational research model.
  *
- * यह एक प्रारंभिक computational research model है।
+ * Internal Refresh and Natural Decay are independent processes.
+ * These parameters are experimental settings, not scientific constants.
  */
 
 /* -------------------------
@@ -60,7 +60,8 @@ data class InternalMemoryState(
     val events: List<RefreshEvent> = emptyList(),
     val nextId: Long = 1L,
     val totalInputs: Int = 0,
-    val totalRefreshes: Int = 0
+    val totalRefreshes: Int = 0,
+    val totalDecayCycles: Int = 0
 )
 
 /* -------------------------
@@ -68,8 +69,9 @@ data class InternalMemoryState(
    ------------------------- */
 
 data class RefreshEngineConfig(
-    val retentionRate: Float = 0.96f,
-    val refreshStrength: Float = 0.30f,
+    val retentionRate: Float = 1f,
+    val refreshStrength: Float = 0.04f,
+    val decayRate: Float = 0.01f,
     val similarityThreshold: Float = 0.25f,
     val maxRecords: Int = 500
 ) {
@@ -77,6 +79,7 @@ data class RefreshEngineConfig(
         return copy(
             retentionRate = retentionRate.coerceIn(0f, 1f),
             refreshStrength = refreshStrength.coerceIn(0f, 1f),
+            decayRate = decayRate.coerceIn(0f, 1f),
             similarityThreshold = similarityThreshold.coerceIn(0f, 1f),
             maxRecords = maxRecords.coerceIn(10, 5000)
         )
@@ -90,7 +93,6 @@ data class RefreshEngineConfig(
 object InternalMemoryEncoder {
 
     fun encode(input: String): List<String> {
-
         return input
             .lowercase(Locale.ROOT)
             .replace(Regex("[^\\p{L}\\p{N}\\s]"), " ")
@@ -103,7 +105,6 @@ object InternalMemoryEncoder {
         first: List<String>,
         second: List<String>
     ): Float {
-
         val a = first.toSet()
         val b = second.toSet()
 
@@ -119,10 +120,18 @@ object InternalMemoryEncoder {
 }
 
 /* -------------------------
-   4. INPUT RECORDING
+   4. INTERNAL MEMORY ENGINE
    ------------------------- */
 
 object InternalMemoryEngine {
+
+    private const val MAX_EVENTS = 500
+    private const val MAX_PATTERNS = 200
+    private const val MAX_TRANSFERS = 1000
+
+    /* -------------------------
+       4A. RECORD EXTERNAL INPUT
+       ------------------------- */
 
     fun recordInput(
         state: InternalMemoryState,
@@ -149,8 +158,9 @@ object InternalMemoryEngine {
             lastUpdatedCycle = nextCycle
         )
 
-        val updatedRecords =
-            (state.records + trace).takeLast(5000)
+        val updatedRecords = (
+            state.records + trace
+        ).takeLast(5000)
 
         return state.copy(
             cycle = nextCycle,
@@ -161,8 +171,16 @@ object InternalMemoryEngine {
     }
 
     /* -------------------------
-       5. CONTINUOUS REFRESH
+       5. INTERNAL REFRESH
        ------------------------- */
+
+    /*
+     * Refresh reinforces existing memory patterns.
+     * It does not apply natural decay.
+     *
+     * Every stored record participates in the shared
+     * refresh process.
+     */
 
     fun refresh(
         state: InternalMemoryState,
@@ -184,7 +202,8 @@ object InternalMemoryEngine {
 
             return state.copy(
                 cycle = nextCycle,
-                events = (state.events + event).takeLast(500)
+                events = (state.events + event).takeLast(MAX_EVENTS),
+                totalRefreshes = state.totalRefreshes + 1
             )
         }
 
@@ -192,34 +211,25 @@ object InternalMemoryEngine {
         val updatedRecords = mutableListOf<MemoryTrace>()
         val transfers = mutableListOf<InformationTransfer>()
 
-        var updatedCount = 0
-        var transferredCount = 0
-
-        /*
-         * हर रिकॉर्ड को Refresh प्रक्रिया से गुजारा जाता है।
-         * Retention और Refresh अलग-अलग नियंत्रित हैं।
-         */
-
         oldRecords.forEach { old ->
 
             val newStrength = (
-                old.strength * settings.retentionRate
+                old.strength +
+                    (1f - old.strength) * settings.refreshStrength
             ).coerceIn(0f, 1f)
 
-            val refreshed = old.copy(
-                strength = newStrength,
-                lastUpdatedCycle = nextCycle,
-                refreshCount = old.refreshCount + 1
+            updatedRecords.add(
+                old.copy(
+                    strength = newStrength,
+                    lastUpdatedCycle = nextCycle,
+                    refreshCount = old.refreshCount + 1
+                )
             )
-
-            updatedRecords.add(refreshed)
-            updatedCount++
         }
 
         /*
-         * Pattern relationships की जाँच।
-         * समान जानकारी वाले पुराने रिकॉर्ड से
-         * नए रिकॉर्ड तक Information Transfer दर्ज होता है।
+         * Related information patterns are connected
+         * through recorded information transfers.
          */
 
         val latest = oldRecords.last()
@@ -249,17 +259,16 @@ object InternalMemoryEngine {
 
             if (transferredTokens.isNotEmpty()) {
 
-                val transfer = InformationTransfer(
-                    cycle = nextCycle,
-                    sourceTraceIds = relatedRecords.map {
-                        it.first.id
-                    },
-                    targetTraceId = latest.id,
-                    transferredTokens = transferredTokens
+                transfers.add(
+                    InformationTransfer(
+                        cycle = nextCycle,
+                        sourceTraceIds = relatedRecords.map {
+                            it.first.id
+                        },
+                        targetTraceId = latest.id,
+                        transferredTokens = transferredTokens
+                    )
                 )
-
-                transfers.add(transfer)
-                transferredCount++
             }
         }
 
@@ -277,23 +286,71 @@ object InternalMemoryEngine {
         val event = RefreshEvent(
             cycle = nextCycle,
             addedRecords = 0,
-            updatedRecords = updatedCount,
-            transferredItems = transferredCount,
+            updatedRecords = updatedRecords.size,
+            transferredItems = transfers.size,
             totalRecords = updatedRecords.size
         )
 
         return state.copy(
             cycle = nextCycle,
             records = updatedRecords,
-            patterns = (state.patterns + pattern).takeLast(200),
-            transfers = (state.transfers + transfers).takeLast(1000),
-            events = (state.events + event).takeLast(500),
+            patterns = (state.patterns + pattern).takeLast(MAX_PATTERNS),
+            transfers = (state.transfers + transfers).takeLast(MAX_TRANSFERS),
+            events = (state.events + event).takeLast(MAX_EVENTS),
             totalRefreshes = state.totalRefreshes + 1
         )
     }
 
     /* -------------------------
-       6. RETRIEVAL
+       6. NATURAL MEMORY DECAY
+       ------------------------- */
+
+    /*
+     * This is an independent process.
+     * It runs only when explicitly called.
+     *
+     * If this function is not called, memory strength
+     * remains unchanged by natural decay.
+     */
+
+    fun applyNaturalDecay(
+        state: InternalMemoryState,
+        config: RefreshEngineConfig = RefreshEngineConfig()
+    ): InternalMemoryState {
+
+        val settings = config.validated()
+        val nextCycle = state.cycle + 1
+
+        val updatedRecords = state.records.map { old ->
+
+            val newStrength = (
+                old.strength * (1f - settings.decayRate)
+            ).coerceIn(0f, 1f)
+
+            old.copy(
+                strength = newStrength,
+                lastUpdatedCycle = nextCycle
+            )
+        }
+
+        val event = RefreshEvent(
+            cycle = nextCycle,
+            addedRecords = 0,
+            updatedRecords = updatedRecords.size,
+            transferredItems = 0,
+            totalRecords = updatedRecords.size
+        )
+
+        return state.copy(
+            cycle = nextCycle,
+            records = updatedRecords,
+            events = (state.events + event).takeLast(MAX_EVENTS),
+            totalDecayCycles = state.totalDecayCycles + 1
+        )
+    }
+
+    /* -------------------------
+       7. MEMORY RETRIEVAL
        ------------------------- */
 
     fun retrieve(
@@ -323,15 +380,16 @@ object InternalMemoryEngine {
     }
 
     /* -------------------------
-       7. RESEARCH METRICS
+       8. RESEARCH METRICS
        ------------------------- */
 
     fun getMetrics(
         state: InternalMemoryState
     ): InternalMemoryMetrics {
 
-        val totalTokens = state.records
-            .sumOf { it.tokens.size }
+        val totalTokens = state.records.sumOf {
+            it.tokens.size
+        }
 
         val averageStrength =
             if (state.records.isEmpty()) {
@@ -356,13 +414,14 @@ object InternalMemoryEngine {
             averageRecordStrength = averageStrength,
             totalTransfers = totalTransfers,
             totalInputs = state.totalInputs,
-            totalRefreshes = state.totalRefreshes
+            totalRefreshes = state.totalRefreshes,
+            totalDecayCycles = state.totalDecayCycles
         )
     }
 }
 
 /* -------------------------
-   8. METRICS DATA
+   9. METRICS DATA
    ------------------------- */
 
 data class InternalMemoryMetrics(
@@ -372,5 +431,6 @@ data class InternalMemoryMetrics(
     val averageRecordStrength: Float,
     val totalTransfers: Int,
     val totalInputs: Int,
-    val totalRefreshes: Int
+    val totalRefreshes: Int,
+    val totalDecayCycles: Int = 0
 )
