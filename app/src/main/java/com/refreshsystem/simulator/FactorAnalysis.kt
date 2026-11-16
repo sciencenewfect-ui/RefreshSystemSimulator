@@ -12,15 +12,40 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlin.math.sqrt
 
 private data class FactorEffect(
     val factor: String,
     val context: String,
     val trials: Int,
-    val stability: Float,
-    val memory: Float,
-    val continuity: Float
+    val stabilityMean: Float,
+    val stabilitySd: Float,
+    val stabilityPositive: Float,
+    val memoryMean: Float,
+    val memorySd: Float,
+    val memoryPositive: Float,
+    val continuityMean: Float,
+    val continuitySd: Float,
+    val continuityPositive: Float
 )
+
+private fun mean(values: List<Float>): Float =
+    if (values.isEmpty()) 0f else values.average().toFloat()
+
+private fun sampleSd(values: List<Float>): Float {
+    if (values.size < 2) return 0f
+    val average = mean(values)
+    val variance = values.sumOf {
+        val difference = (it - average).toDouble()
+        difference * difference
+    } / (values.size - 1)
+    return sqrt(variance).toFloat()
+}
+
+private fun positiveRate(values: List<Float>): Float {
+    if (values.isEmpty()) return 0f
+    return values.count { it > 0f }.toFloat() / values.size
+}
 
 private fun calculateFactorEffects(
     results: List<ResearchResult>
@@ -72,7 +97,9 @@ private fun calculateFactorEffects(
                 .filter { it.condition.id == on.id }
                 .associateBy { it.seed }
 
-            val commonSeeds = offBySeed.keys.intersect(onBySeed.keys)
+            val commonSeeds = offBySeed.keys
+                .intersect(onBySeed.keys)
+                .sorted()
 
             if (commonSeeds.isEmpty()) continue
 
@@ -102,9 +129,18 @@ private fun calculateFactorEffects(
                     factor = factorName,
                     context = context,
                     trials = commonSeeds.size,
-                    stability = stabilityDeltas.average().toFloat(),
-                    memory = memoryDeltas.average().toFloat(),
-                    continuity = continuityDeltas.average().toFloat()
+
+                    stabilityMean = mean(stabilityDeltas),
+                    stabilitySd = sampleSd(stabilityDeltas),
+                    stabilityPositive = positiveRate(stabilityDeltas),
+
+                    memoryMean = mean(memoryDeltas),
+                    memorySd = sampleSd(memoryDeltas),
+                    memoryPositive = positiveRate(memoryDeltas),
+
+                    continuityMean = mean(continuityDeltas),
+                    continuitySd = sampleSd(continuityDeltas),
+                    continuityPositive = positiveRate(continuityDeltas)
                 )
             )
         }
@@ -118,6 +154,7 @@ fun FactorAnalysisPanel(results: List<ResearchResult>) {
     if (results.isEmpty()) return
 
     val effects = calculateFactorEffects(results)
+
     val factors = listOf(
         "External Input",
         "Internal Refresh",
@@ -136,18 +173,18 @@ fun FactorAnalysisPanel(results: List<ResearchResult>) {
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                "FACTOR EFFECT ANALYSIS",
+                "STATISTICAL RELIABILITY ANALYSIS",
                 color = Color(0xFF52E5F2),
                 fontWeight = FontWeight.Bold
             )
 
             Text(
-                "Each comparison changes only one factor. Trials with the same seed are paired.",
+                "Paired comparisons use the same seed for factor ON and factor OFF.",
                 color = Color(0xFF9EABC2)
             )
 
             Text(
-                "Positive value = factor ON produced a higher metric than factor OFF. Negative value = lower metric.",
+                "Mean Effect = average ON minus OFF. SD = sample standard deviation. Positive Trial % = percentage of paired trials with a positive difference.",
                 color = Color(0xFF9EABC2)
             )
 
@@ -164,7 +201,7 @@ fun FactorAnalysisPanel(results: List<ResearchResult>) {
 
                 group.forEach { effect ->
                     Column(
-                        verticalArrangement = Arrangement.spacedBy(5.dp)
+                        verticalArrangement = Arrangement.spacedBy(7.dp)
                     ) {
                         Text(
                             effect.context,
@@ -177,9 +214,26 @@ fun FactorAnalysisPanel(results: List<ResearchResult>) {
                             color = Color(0xFF9EABC2)
                         )
 
-                        EffectValue("Stability", effect.stability)
-                        EffectValue("Memory", effect.memory)
-                        EffectValue("Continuity", effect.continuity)
+                        ReliabilityMetric(
+                            "Stability",
+                            effect.stabilityMean,
+                            effect.stabilitySd,
+                            effect.stabilityPositive
+                        )
+
+                        ReliabilityMetric(
+                            "Memory",
+                            effect.memoryMean,
+                            effect.memorySd,
+                            effect.memoryPositive
+                        )
+
+                        ReliabilityMetric(
+                            "Continuity",
+                            effect.continuityMean,
+                            effect.continuitySd,
+                            effect.continuityPositive
+                        )
                     }
                 }
             }
@@ -187,7 +241,7 @@ fun FactorAnalysisPanel(results: List<ResearchResult>) {
             HorizontalDivider(color = Color(0xFF34445D))
 
             Text(
-                "Interpretation limit: these are differences produced by the current simulator equations and parameters. They are not proof of real-world causation.",
+                "Important: Positive Trial % measures consistency of direction, not statistical significance. These results describe this computational model only.",
                 color = Color(0xFFFFB86B)
             )
         }
@@ -195,22 +249,55 @@ fun FactorAnalysisPanel(results: List<ResearchResult>) {
 }
 
 @Composable
-private fun EffectValue(label: String, delta: Float) {
+private fun ReliabilityMetric(
+    label: String,
+    mean: Float,
+    sd: Float,
+    positive: Float
+) {
     val color = when {
-        delta > 0.0001f -> Color(0xFF62E6A5)
-        delta < -0.0001f -> Color(0xFFFFB86B)
+        mean > 0.0001f -> Color(0xFF62E6A5)
+        mean < -0.0001f -> Color(0xFFFFB86B)
         else -> Color(0xFF9EABC2)
     }
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
+    Column(
+        verticalArrangement = Arrangement.spacedBy(3.dp)
     ) {
-        Text(label, color = Color(0xFF9EABC2))
-        Text(
-            "%+.2f%%".format(delta * 100f),
-            color = color,
-            fontWeight = FontWeight.Bold
-        )
+        Text(label, color = Color.White, fontWeight = FontWeight.Medium)
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("Mean effect", color = Color(0xFF9EABC2))
+            Text(
+                "%+.3f%%".format(mean * 100f),
+                color = color,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("Standard deviation", color = Color(0xFF9EABC2))
+            Text(
+                "%.3f%%".format(sd * 100f),
+                color = Color.White
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("Positive trials", color = Color(0xFF9EABC2))
+            Text(
+                "${(positive * 100f).toInt()}%",
+                color = Color(0xFF52E5F2)
+            )
+        }
     }
 }
