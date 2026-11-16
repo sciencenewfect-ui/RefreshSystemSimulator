@@ -9,8 +9,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -50,6 +50,10 @@ fun ExternalWorldExperimentScreen() {
         mutableStateOf(true)
     }
 
+    var naturalDecayEnabled by remember {
+        mutableStateOf(false)
+    }
+
     var searchCue by remember {
         mutableStateOf("")
     }
@@ -68,7 +72,8 @@ fun ExternalWorldExperimentScreen() {
             state = simulationState,
             externalInputEnabled = externalEnabled,
             internalRefreshEnabled = internalRefreshEnabled,
-            seed = 42
+            seed = 42,
+            naturalDecayEnabled = naturalDecayEnabled
         )
     }
 
@@ -76,6 +81,7 @@ fun ExternalWorldExperimentScreen() {
         modifier = Modifier
             .fillMaxWidth()
             .background(ExperimentBackground)
+            .verticalScroll(rememberScrollState())
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
@@ -92,70 +98,56 @@ fun ExternalWorldExperimentScreen() {
             color = ExperimentMuted
         )
 
-        // INPUT CONTROLS
+        // 1. SYSTEM INPUT CONTROLS
 
         ExperimentCard(title = "1. System Input Controls") {
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column {
-                    Text(
-                        "External Input",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        "Environment se nayi information",
-                        color = ExperimentMuted
-                    )
+            ControlRow(
+                title = "External Input",
+                description = "Environment se nayi information",
+                checked = externalEnabled,
+                onCheckedChange = { externalEnabled = it }
+            )
+
+            ControlRow(
+                title = "Internal Refresh",
+                description = "Existing memory ka refresh process",
+                checked = internalRefreshEnabled,
+                onCheckedChange = {
+                    internalRefreshEnabled = it
                 }
+            )
 
-                Switch(
-                    checked = externalEnabled,
-                    onCheckedChange = { externalEnabled = it }
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column {
-                    Text(
-                        "Internal Refresh",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        "Existing memory ka refresh process",
-                        color = ExperimentMuted
-                    )
+            ControlRow(
+                title = "Natural Decay",
+                description = "Memory strength ka natural reduction",
+                checked = naturalDecayEnabled,
+                onCheckedChange = {
+                    naturalDecayEnabled = it
                 }
-
-                Switch(
-                    checked = internalRefreshEnabled,
-                    onCheckedChange = {
-                        internalRefreshEnabled = it
-                    }
-                )
-            }
+            )
 
             Text(
-                text = "External: ${if (externalEnabled) "ON" else "OFF"}",
+                "External Input: ${if (externalEnabled) "ON" else "OFF"}",
                 color = ExperimentCyan
             )
 
             Text(
-                text = "Internal Refresh: ${
+                "Internal Refresh: ${
                     if (internalRefreshEnabled) "ON" else "OFF"
+                }",
+                color = ExperimentCyan
+            )
+
+            Text(
+                "Natural Decay: ${
+                    if (naturalDecayEnabled) "ON" else "OFF"
                 }",
                 color = ExperimentCyan
             )
         }
 
-        // SIMULATION CONTROL
+        // 2. SIMULATION CONTROL
 
         ExperimentCard(title = "2. Simulation Control") {
 
@@ -190,10 +182,10 @@ fun ExternalWorldExperimentScreen() {
 
             OutlinedButton(
                 onClick = {
-                    simulationState =
-                        ExternalWorldEngine.reset()
+                    simulationState = ExternalWorldEngine.reset()
                     externalEnabled = true
                     internalRefreshEnabled = true
+                    naturalDecayEnabled = false
                     searchCue = ""
                 },
                 modifier = Modifier.fillMaxWidth()
@@ -202,13 +194,13 @@ fun ExternalWorldExperimentScreen() {
             }
         }
 
-        // EXTERNAL WORLD
+        // 3. EXTERNAL WORLD
 
         ExperimentCard(title = "3. External World") {
 
-            Text(
-                "Total Observed Events: ${simulationState.observedEvents}",
-                color = Color.White
+            MetricRow(
+                "Total Observed Events",
+                simulationState.observedEvents
             )
 
             Text(
@@ -240,26 +232,44 @@ fun ExternalWorldExperimentScreen() {
                     .reversed()
                     .forEach { event ->
                         Text(
-                            "Cycle event ${event.id}: ${event.content}",
+                            "Event ${event.id}: ${event.content}",
                             color = Color.White
                         )
                     }
             }
         }
 
-        // INTERNAL MEMORY
+        // 4. INTERNAL MEMORY MEASUREMENTS
 
         ExperimentCard(title = "4. Internal Memory Measurements") {
 
             MetricRow("Memory Records", metrics.totalRecords)
-            MetricRow("Total Information Units", metrics.totalTokens)
+
+            MetricRow(
+                "Total Information Units",
+                metrics.totalTokens
+            )
+
             MetricRow(
                 "Unique Information Units",
                 metrics.uniqueInformationUnits
             )
-            MetricRow("Information Transfers", metrics.totalTransfers)
+
+            MetricRow(
+                "Information Transfers",
+                metrics.totalTransfers
+            )
+
             MetricRow("Total Inputs", metrics.totalInputs)
+
             MetricRow("Total Refreshes", metrics.totalRefreshes)
+
+            MetricRow(
+                "Total Decay Cycles",
+                metrics.totalDecayCycles
+            )
+
+            Spacer(Modifier.height(4.dp))
 
             Text(
                 "Average Memory Strength: ${
@@ -270,7 +280,7 @@ fun ExternalWorldExperimentScreen() {
             )
         }
 
-        // MEMORY RETRIEVAL
+        // 5. MEMORY RETRIEVAL
 
         ExperimentCard(title = "5. Memory Retrieval") {
 
@@ -301,10 +311,21 @@ fun ExternalWorldExperimentScreen() {
                     )
                 } else {
                     retrievedMemories.forEach { memory ->
-                        Text(
-                            memory.content,
-                            color = Color.White
-                        )
+
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Text(
+                                memory.content,
+                                color = Color.White
+                            )
+
+                            Text(
+                                "Strength: ${(memory.strength * 100).toInt()}%",
+                                color = ExperimentCyan,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
                     }
                 }
             }
@@ -313,9 +334,42 @@ fun ExternalWorldExperimentScreen() {
         Spacer(Modifier.height(8.dp))
 
         Text(
-            text = "Research Note: Ye provisional computational simulation hai. Memory strength aur refresh measurements model ke parameters hain, consciousness ya human memory ka scientific proof nahi.",
+            text = "Research Note: Ye provisional computational simulation hai. Memory strength, refresh aur decay values model parameters hain. Ye human memory ya consciousness ka scientific proof nahi hai.",
             color = ExperimentMuted,
             style = MaterialTheme.typography.bodySmall
+        )
+    }
+}
+
+@Composable
+private fun ControlRow(
+    title: String,
+    description: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column(
+            modifier = Modifier.weight(1f)
+        ) {
+            Text(
+                title,
+                color = Color.White,
+                fontWeight = FontWeight.Bold
+            )
+
+            Text(
+                description,
+                color = ExperimentMuted
+            )
+        }
+
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange
         )
     }
 }
@@ -359,6 +413,7 @@ private fun MetricRow(
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(label, color = ExperimentMuted)
+
         Text(
             value.toString(),
             color = Color.White,
