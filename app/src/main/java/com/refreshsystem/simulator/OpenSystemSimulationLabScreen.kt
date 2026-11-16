@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.font.FontWeight
 import kotlinx.coroutines.delay
@@ -30,6 +31,7 @@ private val Muted = Color(0xFF9EABC2)
 
 @Composable
 fun OpenSystemSimulationLabScreen() {
+    val context = LocalContext.current
     val engine = remember { OpenSystemEngine() }
     var snapshot by remember { mutableStateOf(engine.getSnapshot()) }
 
@@ -48,17 +50,19 @@ fun OpenSystemSimulationLabScreen() {
     var busy by remember { mutableStateOf(false) }
 
     var csvToSave by remember { mutableStateOf("") }
+    var exportMessage by remember { mutableStateOf("") }
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("text/csv")
     ) { uri: Uri? ->
         if (uri != null) {
             try {
-                // The URI is written by the Android content resolver.
-                // A failed write is reported in the UI.
-                exportCsv(uri, csvToSave)
-            } catch (_: Exception) {
-                csvToSave = ""
+                context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use {
+                    it.write(csvToSave)
+                }
+                exportMessage = "CSV export completed."
+            } catch (e: Exception) {
+                exportMessage = "CSV export failed: ${e.message}"
             }
         }
     }
@@ -104,17 +108,22 @@ fun OpenSystemSimulationLabScreen() {
     }
 
     Column(
-        Modifier.fillMaxSize().background(Bg)
-            .verticalScroll(rememberScrollState()).padding(16.dp),
+        Modifier
+            .fillMaxSize()
+            .background(Bg)
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Text("REFRESH SYSTEM", color = Cyan, fontWeight = FontWeight.Bold)
+
         Text(
             "Open System Research Lab",
             color = Color.White,
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold
         )
+
         Text(
             "External Information • Internal Refresh • Memory • Dynamic Stability",
             color = Muted
@@ -122,6 +131,7 @@ fun OpenSystemSimulationLabScreen() {
 
         PanelCard("INTERNAL WORLD NETWORK") {
             NetworkDiagram(snapshot.internalPattern, snapshot.memoryState)
+
             Text(
                 "Node intensity = internal pattern; outer glow = memory magnitude.",
                 color = Muted,
@@ -136,23 +146,37 @@ fun OpenSystemSimulationLabScreen() {
         }
 
         PanelCard("LIVE EXPERIMENT") {
-            Text("Cycle: $cycle", color = Color.White, fontWeight = FontWeight.Bold)
+            Text(
+                "Cycle: $cycle",
+                color = Color.White,
+                fontWeight = FontWeight.Bold
+            )
+
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
                     onClick = { running = !running },
                     modifier = Modifier.weight(1f)
-                ) { Text(if (running) "Pause" else "Start") }
+                ) {
+                    Text(if (running) "Pause" else "Start")
+                }
 
                 OutlinedButton(
                     onClick = { if (!running) runCycle() },
                     modifier = Modifier.weight(1f)
-                ) { Text("One Cycle") }
+                ) {
+                    Text("One Cycle")
+                }
             }
+
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(
-                    onClick = { if (!running) repeat(10) { runCycle() } },
+                    onClick = {
+                        if (!running) repeat(10) { runCycle() }
+                    },
                     modifier = Modifier.weight(1f)
-                ) { Text("Run 10") }
+                ) {
+                    Text("Run 10")
+                }
 
                 OutlinedButton(
                     onClick = {
@@ -164,8 +188,11 @@ fun OpenSystemSimulationLabScreen() {
                         history = emptyList()
                     },
                     modifier = Modifier.weight(1f)
-                ) { Text("Reset") }
+                ) {
+                    Text("Reset")
+                }
             }
+
             Text("Recorded live cycles: ${history.size}", color = Muted)
         }
 
@@ -175,8 +202,16 @@ fun OpenSystemSimulationLabScreen() {
             Metric("Identity Continuity", snapshot.identityContinuity)
             Metric("Network Strength", snapshot.networkStrength)
             Metric("External Information", snapshot.informationLevel)
-            ValueLine("Pattern Change", "%.5f".format(snapshot.patternChange))
-            ValueLine("Refresh Count", snapshot.refreshCount.toString())
+
+            ValueLine(
+                "Pattern Change",
+                "%.5f".format(snapshot.patternChange)
+            )
+
+            ValueLine(
+                "Refresh Count",
+                snapshot.refreshCount.toString()
+            )
         }
 
         PanelCard("8-CONDITION CONTROLLED EXPERIMENT") {
@@ -188,7 +223,9 @@ fun OpenSystemSimulationLabScreen() {
 
             OutlinedTextField(
                 value = seed.toString(),
-                onValueChange = { it.toIntOrNull()?.let { v -> seed = v } },
+                onValueChange = {
+                    it.toIntOrNull()?.let { value -> seed = value }
+                },
                 label = { Text("Base random seed") },
                 singleLine = true
             )
@@ -196,7 +233,9 @@ fun OpenSystemSimulationLabScreen() {
             OutlinedTextField(
                 value = repeats.toString(),
                 onValueChange = {
-                    it.toIntOrNull()?.coerceIn(1, 100)?.let { v -> repeats = v }
+                    it.toIntOrNull()?.coerceIn(1, 100)?.let { value ->
+                        repeats = value
+                    }
                 },
                 label = { Text("Repeat trials (1–100)") },
                 singleLine = true
@@ -206,16 +245,19 @@ fun OpenSystemSimulationLabScreen() {
                 enabled = !busy && !running,
                 onClick = {
                     busy = true
-                    // Run the deterministic calculation off the UI event callback.
-                    // Result state is assigned after calculation.
+
                     val output = ResearchExperimentEngine.run(seed, repeats)
+
                     results = output.first
                     experimentRecords = output.second
                     busy = false
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(if (busy) "Running..." else "Run 8-Condition Experiment")
+                Text(
+                    if (busy) "Running..."
+                    else "Run 8-Condition Experiment"
+                )
             }
 
             if (results.isNotEmpty()) {
@@ -224,34 +266,54 @@ fun OpenSystemSimulationLabScreen() {
                     color = Green
                 )
 
-                results.groupBy { it.condition.id }.toSortedMap().forEach { (_, group) ->
-                    val first = group.first()
-                    val meanStability = group.map { it.finalStability }.average()
-                    val meanMemory = group.map { it.finalMemory }.average()
-                    val meanContinuity = group.map { it.finalContinuity }.average()
+                results.groupBy { it.condition.id }
+                    .toSortedMap()
+                    .forEach { (_, group) ->
+                        val first = group.first()
+                        val meanStability =
+                            group.map { it.finalStability }.average()
+                        val meanMemory =
+                            group.map { it.finalMemory }.average()
+                        val meanContinuity =
+                            group.map { it.finalContinuity }.average()
 
-                    HorizontalDivider(color = Color(0xFF29364D))
-                    Text(first.condition.name, color = Cyan, fontWeight = FontWeight.Bold)
-                    Text(
-                        "Mean final stability: ${(meanStability * 100).toInt()}%",
-                        color = Color.White
-                    )
-                    Text(
-                        "Mean final memory: ${(meanMemory * 100).toInt()}% • " +
-                            "Mean continuity: ${(meanContinuity * 100).toInt()}%",
-                        color = Muted
-                    )
-                }
+                        HorizontalDivider(color = Color(0xFF29364D))
+
+                        Text(
+                            first.condition.name,
+                            color = Cyan,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        Text(
+                            "Mean final stability: ${(meanStability * 100).toInt()}%",
+                            color = Color.White
+                        )
+
+                        Text(
+                            "Mean final memory: ${(meanMemory * 100).toInt()}% • " +
+                                "Mean continuity: ${(meanContinuity * 100).toInt()}%",
+                            color = Muted
+                        )
+                    }
 
                 Button(
                     onClick = {
                         csvToSave = ResearchExperimentEngine.csv(
-                            experimentRecords, results
+                            experimentRecords,
+                            results
                         )
+                        exportMessage = ""
                         exportLauncher.launch("refresh_system_experiment.csv")
                     },
                     modifier = Modifier.fillMaxWidth()
-                ) { Text("Export Full Experiment CSV") }
+                ) {
+                    Text("Export Full Experiment CSV")
+                }
+
+                if (exportMessage.isNotEmpty()) {
+                    Text(exportMessage, color = Green)
+                }
             }
         }
 
@@ -265,7 +327,10 @@ fun OpenSystemSimulationLabScreen() {
                     style = MaterialTheme.typography.bodySmall
                 )
             }
-            if (history.isEmpty()) Text("No live measurements yet.", color = Muted)
+
+            if (history.isEmpty()) {
+                Text("No live measurements yet.", color = Muted)
+            }
         }
 
         PanelCard("MODEL LIMITATIONS") {
@@ -281,13 +346,11 @@ fun OpenSystemSimulationLabScreen() {
     }
 }
 
-private fun exportCsv(uri: Uri, content: String) {
-    // Use ContentResolver from the URI's registered Android provider.
-    // This helper is replaced by the context-aware overload below.
-}
-
 @Composable
-private fun PanelCard(title: String, content: @Composable ColumnScope.() -> Unit) {
+private fun PanelCard(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Panel),
@@ -321,14 +384,21 @@ private fun ControlSwitch(
 @Composable
 private fun Metric(label: String, value: Float) {
     val safe = value.coerceIn(0f, 1f)
+
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
             Text(label, color = Color.White)
             Text("${(safe * 100).toInt()}%", color = Cyan)
         }
+
         LinearProgressIndicator(
-            progress = { safe },
-            modifier = Modifier.fillMaxWidth().height(7.dp),
+            progress = safe,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(7.dp),
             color = Cyan,
             trackColor = Color(0xFF29364D)
         )
@@ -337,25 +407,39 @@ private fun Metric(label: String, value: Float) {
 
 @Composable
 private fun ValueLine(label: String, value: String) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
         Text(label, color = Muted)
         Text(value, color = Color.White)
     }
 }
 
 @Composable
-private fun NetworkDiagram(pattern: List<Float>, memory: List<Float>) {
+private fun NetworkDiagram(
+    pattern: List<Float>,
+    memory: List<Float>
+) {
     Canvas(
-        Modifier.fillMaxWidth().height(230.dp)
-            .background(Color(0xFF0D1729), RoundedCornerShape(12.dp))
+        Modifier
+            .fillMaxWidth()
+            .height(230.dp)
+            .background(
+                Color(0xFF0D1729),
+                RoundedCornerShape(12.dp)
+            )
     ) {
         val count = minOf(pattern.size, memory.size)
         if (count == 0) return@Canvas
 
         val center = Offset(size.width / 2f, size.height / 2f)
         val radius = size.minDimension * 0.36f
+
         val points = List(count) { i ->
-            val angle = 2.0 * Math.PI * i / count - Math.PI / 2.0
+            val angle =
+                2.0 * Math.PI * i / count - Math.PI / 2.0
+
             Offset(
                 center.x + cos(angle).toFloat() * radius,
                 center.y + sin(angle).toFloat() * radius
@@ -364,12 +448,14 @@ private fun NetworkDiagram(pattern: List<Float>, memory: List<Float>) {
 
         for (i in 0 until count) {
             val next = (i + 1) % count
+
             drawLine(
                 Color(0xFF526A8A),
                 points[i],
                 points[next],
                 strokeWidth = 2.dp.toPx()
             )
+
             drawLine(
                 Color(0xFF34465F),
                 points[i],
@@ -381,17 +467,24 @@ private fun NetworkDiagram(pattern: List<Float>, memory: List<Float>) {
         for (i in 0 until count) {
             val p = pattern[i].coerceIn(-1f, 1f)
             val m = kotlin.math.abs(memory[i]).coerceIn(0f, 1f)
+
             drawCircle(
                 Green.copy(alpha = 0.18f + m * 0.55f),
                 radius = 9.dp.toPx() + m * 9.dp.toPx(),
                 center = points[i]
             )
+
             drawCircle(
                 Cyan.copy(alpha = 0.35f + kotlin.math.abs(p) * 0.65f),
                 radius = 4.dp.toPx() + kotlin.math.abs(p) * 5.dp.toPx(),
                 center = points[i]
             )
         }
-        drawCircle(Cyan, 5.dp.toPx(), center)
+
+        drawCircle(
+            Cyan,
+            5.dp.toPx(),
+            center
+        )
     }
 }
