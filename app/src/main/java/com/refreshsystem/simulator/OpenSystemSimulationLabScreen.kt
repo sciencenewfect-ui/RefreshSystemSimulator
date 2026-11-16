@@ -21,9 +21,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
@@ -337,6 +337,9 @@ fun OpenSystemSimulationLabScreen() {
                 )
 
                 ConditionComparisonChart(results)
+
+                // Factor-wise paired comparison analysis
+                FactorAnalysisPanel(results)
 
                 Row(
                     Modifier.fillMaxWidth(),
