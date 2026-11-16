@@ -31,7 +31,8 @@ data class ResearchCycle(
     val memory: Float,
     val continuity: Float,
     val network: Float,
-    val patternChange: Float
+    val patternChange: Float,
+    val phase: String = "TEST"
 )
 
 object ResearchExperimentEngine {
@@ -72,20 +73,39 @@ object ResearchExperimentEngine {
                 val engine = OpenSystemEngine(seed)
                 var current = engine.getSnapshot()
 
-                // Identical training for every experimental condition.
-                repeat(TRAINING_CYCLES) { cycle ->
+                // PHASE 1: IDENTICAL TRAINING FOR ALL CONDITIONS.
+                repeat(TRAINING_CYCLES) { index ->
                     current = engine.step(
-                        externalFeatures = inputFor(cycle, seed),
+                        externalFeatures = inputFor(index, seed),
                         internalRefreshEnabled = true,
                         naturalDecayEnabled = false
                     )
+
+                    records.add(
+                        ResearchCycle(
+                            seed = seed,
+                            conditionId = condition.id,
+                            cycle = index + 1,
+                            external = true,
+                            refresh = true,
+                            decay = false,
+                            stability = current.dynamicStability,
+                            memory = current.memoryRetention,
+                            continuity = current.identityContinuity,
+                            network = current.networkStrength,
+                            patternChange = current.patternChange,
+                            phase = "TRAINING"
+                        )
+                    )
                 }
 
+                // PHASE 2: CONDITION-SPECIFIC TEST.
                 val stabilityValues = mutableListOf<Float>()
                 val memoryValues = mutableListOf<Float>()
 
                 repeat(TEST_CYCLES) { index ->
                     val testCycle = TRAINING_CYCLES + index
+
                     val features = if (condition.external) {
                         inputFor(testCycle, seed)
                     } else {
@@ -113,7 +133,8 @@ object ResearchExperimentEngine {
                             memory = current.memoryRetention,
                             continuity = current.identityContinuity,
                             network = current.networkStrength,
-                            patternChange = current.patternChange
+                            patternChange = current.patternChange,
+                            phase = "TEST"
                         )
                     )
                 }
@@ -136,12 +157,21 @@ object ResearchExperimentEngine {
         return results to records
     }
 
-    fun csv(records: List<ResearchCycle>, results: List<ResearchResult>): String {
+    fun csv(
+        records: List<ResearchCycle>,
+        results: List<ResearchResult>
+    ): String {
         val out = StringBuilder()
-        out.appendLine("DATA_TYPE,SEED,CONDITION_ID,CYCLE,EXTERNAL,REFRESH,DECAY,STABILITY,MEMORY,CONTINUITY,NETWORK,PATTERN_CHANGE")
+
+        out.appendLine(
+            "DATA_TYPE,PHASE,SEED,CONDITION_ID,CYCLE," +
+                "EXTERNAL,REFRESH,DECAY,STABILITY,MEMORY," +
+                "CONTINUITY,NETWORK,PATTERN_CHANGE"
+        )
+
         records.forEach {
             out.appendLine(
-                "CYCLE,${it.seed},${it.conditionId},${it.cycle}," +
+                "CYCLE,${it.phase},${it.seed},${it.conditionId},${it.cycle}," +
                     "${it.external},${it.refresh},${it.decay}," +
                     "${it.stability},${it.memory},${it.continuity}," +
                     "${it.network},${it.patternChange}"
@@ -149,10 +179,16 @@ object ResearchExperimentEngine {
         }
 
         out.appendLine()
-        out.appendLine("RESULT_TYPE,SEED,CONDITION_ID,CONDITION,FINAL_STABILITY,FINAL_MEMORY,FINAL_CONTINUITY,FINAL_NETWORK,MEAN_STABILITY,MEAN_MEMORY")
+
+        out.appendLine(
+            "RESULT_TYPE,SEED,CONDITION_ID,CONDITION," +
+                "FINAL_STABILITY,FINAL_MEMORY,FINAL_CONTINUITY," +
+                "FINAL_NETWORK,MEAN_STABILITY,MEAN_MEMORY"
+        )
 
         results.forEach {
             val safeName = it.condition.name.replace(",", ";")
+
             out.appendLine(
                 "RESULT,${it.seed},${it.condition.id},$safeName," +
                     "${it.finalStability},${it.finalMemory}," +
@@ -160,6 +196,7 @@ object ResearchExperimentEngine {
                     "${it.meanStability},${it.meanMemory}"
             )
         }
+
         return out.toString()
     }
 }
