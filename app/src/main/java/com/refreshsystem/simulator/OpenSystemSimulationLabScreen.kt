@@ -341,6 +341,9 @@ fun OpenSystemSimulationLabScreen() {
                 // Factor-wise paired comparison analysis
                 FactorAnalysisPanel(results)
 
+                // Memory information fidelity analysis
+                MemoryFidelityAnalysis(results)
+
                 Row(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly
