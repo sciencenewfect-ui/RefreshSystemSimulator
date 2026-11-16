@@ -44,6 +44,10 @@ private fun RefreshExperimentLab() {
         mutableStateOf("daily_life")
     }
 
+    var naturalDecayEnabled by remember {
+        mutableStateOf(true)
+    }
+
     var running by remember {
         mutableStateOf(false)
     }
@@ -52,7 +56,7 @@ private fun RefreshExperimentLab() {
         mutableStateOf("Experiment तैयार है।")
     }
 
-    LaunchedEffect(running, selectedCondition, currentContext) {
+    LaunchedEffect(running, selectedCondition, currentContext, naturalDecayEnabled) {
         while (running) {
             delay(900L)
 
@@ -60,7 +64,8 @@ private fun RefreshExperimentLab() {
                 state = simulation,
                 input = SimulationInput(
                     condition = selectedCondition,
-                    currentContextKey = currentContext
+                    currentContextKey = currentContext,
+                    naturalDecayEnabled = naturalDecayEnabled
                 )
             )
 
@@ -95,15 +100,14 @@ private fun RefreshExperimentLab() {
 
         Text(
             text = "यह simulator External Input, Internal Input, Refresh, " +
-                "Dynamic Stability और Memory Patterns के संबंधों को test करता है।",
+                "Natural Decay, Dynamic Stability और Memory Patterns " +
+                "के संबंधों को test करता है।",
             style = MaterialTheme.typography.bodyMedium
         )
 
         // EXPERIMENT CONDITIONS
 
-        Card(
-            modifier = Modifier.fillMaxWidth()
-        ) {
+        Card(modifier = Modifier.fillMaxWidth()) {
             Column(
                 modifier = Modifier.padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -122,9 +126,7 @@ private fun RefreshExperimentLab() {
                             selectedCondition = condition
                             status = "Condition: ${condition.label}"
                         },
-                        label = {
-                            Text(condition.label)
-                        },
+                        label = { Text(condition.label) },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -138,9 +140,7 @@ private fun RefreshExperimentLab() {
 
         // CURRENT CONTEXT
 
-        Card(
-            modifier = Modifier.fillMaxWidth()
-        ) {
+        Card(modifier = Modifier.fillMaxWidth()) {
             Column(
                 modifier = Modifier.padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -153,12 +153,8 @@ private fun RefreshExperimentLab() {
 
                 OutlinedTextField(
                     value = currentContext,
-                    onValueChange = {
-                        currentContext = it
-                    },
-                    label = {
-                        Text("Context Key")
-                    },
+                    onValueChange = { currentContext = it },
+                    label = { Text("Context Key") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
@@ -170,18 +166,77 @@ private fun RefreshExperimentLab() {
             }
         }
 
+        // INDEPENDENT DECAY CONTROL
+
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+
+                Text(
+                    "3. Refresh & Decay Controls",
+                    style = MaterialTheme.typography.titleLarge
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Natural Decay",
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            if (naturalDecayEnabled)
+                                "Memory और stability decay active"
+                            else
+                                "Natural Decay disabled",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
+                    Switch(
+                        checked = naturalDecayEnabled,
+                        onCheckedChange = {
+                            naturalDecayEnabled = it
+                            status = if (it) {
+                                "Natural Decay enabled."
+                            } else {
+                                "Natural Decay disabled."
+                            }
+                        }
+                    )
+                }
+
+                Text(
+                    "Refresh: ${
+                        if (selectedCondition.refreshEnabled) "ON" else "OFF"
+                    }",
+                    fontWeight = FontWeight.SemiBold
+                )
+
+                Text(
+                    "Natural Decay: ${
+                        if (naturalDecayEnabled) "ON" else "OFF"
+                    }",
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
+
         // LIVE SYSTEM STATUS
 
-        Card(
-            modifier = Modifier.fillMaxWidth()
-        ) {
+        Card(modifier = Modifier.fillMaxWidth()) {
             Column(
                 modifier = Modifier.padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(9.dp)
             ) {
 
                 Text(
-                    "3. Live System Measurements",
+                    "4. Live System Measurements",
                     style = MaterialTheme.typography.titleLarge
                 )
 
@@ -221,16 +276,14 @@ private fun RefreshExperimentLab() {
 
         // SIMULATION CONTROLS
 
-        Card(
-            modifier = Modifier.fillMaxWidth()
-        ) {
+        Card(modifier = Modifier.fillMaxWidth()) {
             Column(
                 modifier = Modifier.padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
 
                 Text(
-                    "4. Simulation Controls",
+                    "5. Simulation Controls",
                     style = MaterialTheme.typography.titleLarge
                 )
 
@@ -268,7 +321,8 @@ private fun RefreshExperimentLab() {
                             state = simulation,
                             input = SimulationInput(
                                 condition = selectedCondition,
-                                currentContextKey = currentContext
+                                currentContextKey = currentContext,
+                                naturalDecayEnabled = naturalDecayEnabled
                             )
                         )
 
@@ -283,6 +337,7 @@ private fun RefreshExperimentLab() {
                 OutlinedButton(
                     onClick = {
                         running = false
+                        naturalDecayEnabled = true
 
                         simulation =
                             RefreshSimulationEngine.createInitialState(
@@ -300,16 +355,14 @@ private fun RefreshExperimentLab() {
 
         // MEMORY ACTIVATION
 
-        Card(
-            modifier = Modifier.fillMaxWidth()
-        ) {
+        Card(modifier = Modifier.fillMaxWidth()) {
             Column(
                 modifier = Modifier.padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
 
                 Text(
-                    "5. Memory Pattern Activation",
+                    "6. Memory Pattern Activation",
                     style = MaterialTheme.typography.titleLarge
                 )
 
@@ -355,15 +408,8 @@ private fun RefreshExperimentLab() {
                             style = MaterialTheme.typography.bodySmall
                         )
 
-                        ResultMetric(
-                            "Strength",
-                            pattern.strength
-                        )
-
-                        ResultMetric(
-                            "Continuity",
-                            pattern.continuity
-                        )
+                        ResultMetric("Strength", pattern.strength)
+                        ResultMetric("Continuity", pattern.continuity)
 
                         Text(
                             "Activation Probability: ${
@@ -380,16 +426,14 @@ private fun RefreshExperimentLab() {
 
         // LIVE GRAPH
 
-        Card(
-            modifier = Modifier.fillMaxWidth()
-        ) {
+        Card(modifier = Modifier.fillMaxWidth()) {
             Column(
                 modifier = Modifier.padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
 
                 Text(
-                    "6. Dynamic Stability Graph",
+                    "7. Dynamic Stability Graph",
                     style = MaterialTheme.typography.titleLarge
                 )
 
@@ -415,16 +459,14 @@ private fun RefreshExperimentLab() {
 
         // EXPERIMENT HISTORY
 
-        Card(
-            modifier = Modifier.fillMaxWidth()
-        ) {
+        Card(modifier = Modifier.fillMaxWidth()) {
             Column(
                 modifier = Modifier.padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
 
                 Text(
-                    "7. Experiment History",
+                    "8. Experiment History",
                     style = MaterialTheme.typography.titleLarge
                 )
 
@@ -450,6 +492,11 @@ private fun RefreshExperimentLab() {
                     )
 
                     Text(
+                        "Refresh: ${if (record.refreshEnabled) "ON" else "OFF"} | " +
+                            "Decay: ${if (record.naturalDecayEnabled) "ON" else "OFF"}"
+                    )
+
+                    Text(
                         "Selected Pattern ID: ${record.selectedPatternId}"
                     )
                 }
@@ -462,9 +509,7 @@ private fun RefreshExperimentLab() {
 
         // MODEL LIMITATIONS
 
-        Card(
-            modifier = Modifier.fillMaxWidth()
-        ) {
+        Card(modifier = Modifier.fillMaxWidth()) {
             Column(
                 modifier = Modifier.padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -475,26 +520,22 @@ private fun RefreshExperimentLab() {
                     style = MaterialTheme.typography.titleLarge
                 )
 
-                Text(
-                    "• सभी Memory Patterns shared Refresh से update होते हैं।"
-                )
+                Text("• सभी Memory Patterns shared Refresh से update होते हैं.")
 
-                Text(
-                    "• Context और randomness memory selection को प्रभावित करते हैं।"
-                )
+                Text("• Context और randomness memory selection को प्रभावित करते हैं.")
 
-                Text(
-                    "• Numerical rates अभी provisional assumptions हैं।"
-                )
+                Text("• Refresh और Natural Decay अलग-अलग controls हैं.")
+
+                Text("• Numerical rates अभी provisional assumptions हैं.")
 
                 Text(
                     "• Memory connections और related-pattern reactivation " +
-                        "का पूरा model अभी implement नहीं हुआ है।"
+                        "का पूरा model अभी implement नहीं हुआ है."
                 )
 
                 Text(
                     "• Memory Dynamic Stability अभी average pattern continuity " +
-                        "से estimate की जाती है।"
+                        "से estimate की जाती है."
                 )
             }
         }
@@ -549,8 +590,6 @@ private fun StabilityGraph(
 
         val graphWidth = right - left
         val graphHeight = bottom - top
-
-        // Horizontal reference lines
 
         for (i in 0..4) {
 
