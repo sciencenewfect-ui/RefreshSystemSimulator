@@ -1,6 +1,8 @@
 
 package com.refreshsystem.simulator
 
+import kotlin.math.sqrt
+
 data class ResearchCondition(
     val id: Int,
     val name: String,
@@ -19,7 +21,10 @@ data class ResearchResult(
     val meanStability: Float,
     val meanMemory: Float,
     val trainingEndMemory: Float,
-    val memoryCurve: List<Float>
+    val memoryCurve: List<Float>,
+    val finalMemoryFidelity: Float,
+    val meanMemoryFidelity: Float,
+    val memoryFidelityCurve: List<Float>
 )
 
 data class ResearchCycle(
@@ -34,7 +39,8 @@ data class ResearchCycle(
     val continuity: Float,
     val network: Float,
     val patternChange: Float,
-    val phase: String = "TEST"
+    val phase: String = "TEST",
+    val memoryFidelity: Float = -1f
 )
 
 object ResearchExperimentEngine {
@@ -59,6 +65,33 @@ object ResearchExperimentEngine {
             val phase = cycle * 0.17 + i * 0.31 + seed * 0.013
             kotlin.math.sin(phase).toFloat().coerceIn(-1f, 1f)
         }
+
+    // Cosine similarity compares memory pattern direction, independently
+    // of its overall magnitude. Result range: -1 to +1.
+    private fun calculateMemoryFidelity(
+        baseline: List<Float>,
+        current: List<Float>
+    ): Float {
+        val length = minOf(baseline.size, current.size)
+        if (length == 0) return 0f
+
+        var dot = 0f
+        var baselineEnergy = 0f
+        var currentEnergy = 0f
+
+        for (i in 0 until length) {
+            dot += baseline[i] * current[i]
+            baselineEnergy += baseline[i] * baseline[i]
+            currentEnergy += current[i] * current[i]
+        }
+
+        if (baselineEnergy < 0.000001f || currentEnergy < 0.000001f) {
+            return 0f
+        }
+
+        return (dot / (sqrt(baselineEnergy) * sqrt(currentEnergy)))
+            .coerceIn(-1f, 1f)
+    }
 
     fun run(
         baseSeed: Int = 42,
@@ -101,13 +134,15 @@ object ResearchExperimentEngine {
                     )
                 }
 
-                // Memory baseline immediately after training.
+                // Save the actual trained memory vector as fidelity baseline.
+                val trainingMemoryPattern = current.memoryState.toList()
                 val trainingEndMemory = current.memoryRetention
 
                 // PHASE 2: CONDITION-SPECIFIC TEST.
                 val stabilityValues = mutableListOf<Float>()
                 val memoryValues = mutableListOf<Float>()
                 val memoryCurve = mutableListOf<Float>()
+                val fidelityCurve = mutableListOf<Float>()
 
                 repeat(TEST_CYCLES) { index ->
                     val testCycle = TRAINING_CYCLES + index
@@ -124,9 +159,15 @@ object ResearchExperimentEngine {
                         naturalDecayEnabled = condition.decay
                     )
 
+                    val fidelity = calculateMemoryFidelity(
+                        trainingMemoryPattern,
+                        current.memoryState
+                    )
+
                     stabilityValues.add(current.dynamicStability)
                     memoryValues.add(current.memoryRetention)
                     memoryCurve.add(current.memoryRetention)
+                    fidelityCurve.add(fidelity)
 
                     records.add(
                         ResearchCycle(
@@ -141,7 +182,8 @@ object ResearchExperimentEngine {
                             continuity = current.identityContinuity,
                             network = current.networkStrength,
                             patternChange = current.patternChange,
-                            phase = "TEST"
+                            phase = "TEST",
+                            memoryFidelity = fidelity
                         )
                     )
                 }
@@ -157,7 +199,10 @@ object ResearchExperimentEngine {
                         meanStability = stabilityValues.average().toFloat(),
                         meanMemory = memoryValues.average().toFloat(),
                         trainingEndMemory = trainingEndMemory,
-                        memoryCurve = memoryCurve.toList()
+                        memoryCurve = memoryCurve.toList(),
+                        finalMemoryFidelity = fidelityCurve.lastOrNull() ?: 0f,
+                        meanMemoryFidelity = fidelityCurve.average().toFloat(),
+                        memoryFidelityCurve = fidelityCurve.toList()
                     )
                 )
             }
@@ -175,7 +220,7 @@ object ResearchExperimentEngine {
         out.appendLine(
             "DATA_TYPE,PHASE,SEED,CONDITION_ID,CYCLE," +
                 "EXTERNAL,REFRESH,DECAY,STABILITY,MEMORY," +
-                "CONTINUITY,NETWORK,PATTERN_CHANGE"
+                "CONTINUITY,NETWORK,PATTERN_CHANGE,MEMORY_FIDELITY"
         )
 
         records.forEach {
@@ -183,7 +228,7 @@ object ResearchExperimentEngine {
                 "CYCLE,${it.phase},${it.seed},${it.conditionId},${it.cycle}," +
                     "${it.external},${it.refresh},${it.decay}," +
                     "${it.stability},${it.memory},${it.continuity}," +
-                    "${it.network},${it.patternChange}"
+                    "${it.network},${it.patternChange},${it.memoryFidelity}"
             )
         }
 
@@ -193,7 +238,8 @@ object ResearchExperimentEngine {
             "RESULT_TYPE,SEED,CONDITION_ID,CONDITION," +
                 "FINAL_STABILITY,FINAL_MEMORY,FINAL_CONTINUITY," +
                 "FINAL_NETWORK,MEAN_STABILITY,MEAN_MEMORY," +
-                "TRAINING_END_MEMORY,MEMORY_RETENTION_RATIO"
+                "TRAINING_END_MEMORY,MEMORY_RETENTION_RATIO," +
+                "FINAL_MEMORY_FIDELITY,MEAN_MEMORY_FIDELITY"
         )
 
         results.forEach {
@@ -209,7 +255,8 @@ object ResearchExperimentEngine {
                     "${it.finalStability},${it.finalMemory}," +
                     "${it.finalContinuity},${it.finalNetwork}," +
                     "${it.meanStability},${it.meanMemory}," +
-                    "${it.trainingEndMemory},${ratio ?: "N/A"}"
+                    "${it.trainingEndMemory},${ratio ?: "N/A"}," +
+                    "${it.finalMemoryFidelity},${it.meanMemoryFidelity}"
             )
         }
 
