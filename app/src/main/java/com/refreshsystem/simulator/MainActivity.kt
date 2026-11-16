@@ -1,4 +1,3 @@
-
 package com.refreshsystem.simulator
 
 import android.os.Bundle
@@ -11,11 +10,6 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 
-private val Ink = Color(0xFF10131C)
-private val Panel = Color(0xFF1A2030)
-private val Cyan = Color(0xFF6BE7F2)
-private val Red = Color(0xFFFF3B45)
-
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -24,19 +18,19 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme(
                 colorScheme = darkColorScheme(
-                    background = Ink,
-                    surface = Panel,
-                    primary = Red,
-                    secondary = Cyan,
+                    background = Color(0xFF0B1020),
+                    surface = Color(0xFF151F33),
+                    primary = Color(0xFF52E5F2),
+                    secondary = Color(0xFF62E6A5),
                     onBackground = Color.White,
                     onSurface = Color.White
                 )
             ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = Ink
+                    color = Color(0xFF0B1020)
                 ) {
-                    ExternalWorldExperimentScreen()
+                    OpenSystemSimulationLabScreen()
                 }
             }
         }
