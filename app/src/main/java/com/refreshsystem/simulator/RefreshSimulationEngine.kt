@@ -6,12 +6,10 @@ import kotlin.random.Random
 /**
  * Refresh System Simulator
  *
- * Core simulation engine.
- * Pure Kotlin: no Android UI dependencies.
+ * Pure Kotlin simulation engine.
  *
- * IMPORTANT:
- * All numerical rates are provisional simulation assumptions.
- * They are adjustable parameters, not established scientific laws.
+ * All numerical values are provisional assumptions.
+ * They must be tested and calibrated through experiments.
  */
 
 enum class ExperimentCondition(
@@ -21,31 +19,23 @@ enum class ExperimentCondition(
     val label: String
 ) {
     A_BOTH_ON(
-        externalInput = 1.0,
-        internalInput = 1.0,
-        refreshEnabled = true,
-        label = "External ON + Internal ON"
+        1.0, 1.0, true,
+        "External ON + Internal ON"
     ),
 
     B_EXTERNAL_OFF(
-        externalInput = 0.0,
-        internalInput = 1.0,
-        refreshEnabled = true,
-        label = "External OFF + Internal ON"
+        0.0, 1.0, true,
+        "External OFF + Internal ON"
     ),
 
     C_BOTH_OFF(
-        externalInput = 0.0,
-        internalInput = 0.0,
-        refreshEnabled = false,
-        label = "External OFF + Internal OFF"
+        0.0, 0.0, false,
+        "External OFF + Internal OFF"
     ),
 
     D_EXTERNAL_RESTORED(
-        externalInput = 1.0,
-        internalInput = 1.0,
-        refreshEnabled = true,
-        label = "External Input Restored"
+        1.0, 1.0, true,
+        "External Input Restored"
     )
 }
 
@@ -60,24 +50,23 @@ data class MemoryPattern(
 )
 
 data class SimulationConfig(
-    // Global Dynamic Stability parameters
+    // Relative contribution of external and internal inputs.
+    val externalInputWeight: Double = 0.75,
+    val internalInputWeight: Double = 0.25,
+
+    // Global Dynamic Stability parameters.
     val globalRefreshRate: Double = 0.04,
     val globalDecayRate: Double = 0.01,
 
-    // Internal input has a weaker maintenance effect
-    val internalMaintenanceRate: Double = 0.02,
-
-    // Shared Memory Pattern parameters
+    // Memory parameters.
     val sharedMemoryRefreshGain: Double = 0.015,
     val memoryDecayRate: Double = 0.008,
 
     val sharedContinuityGain: Double = 0.012,
     val continuityDecayRate: Double = 0.006,
 
-    // Activation effect
+    // Activation parameters.
     val activationReinforcement: Double = 0.025,
-
-    // Memory selection parameters
     val randomSelectionWeight: Double = 0.10,
     val contextSelectionWeight: Double = 0.90
 )
@@ -94,37 +83,40 @@ data class SimulationMetrics(
     val averageMemoryStrength: Double,
     val averagePatternContinuity: Double,
     val selectedPatternId: Int?,
-    val selectedPatternProbability: Double
+    val selectedPatternProbability: Double,
+    val externalInput: Double,
+    val internalInput: Double,
+    val effectiveInputSupport: Double
 )
 
 data class SimulationState(
     val step: Int = 0,
     val randomSeed: Int = 42,
-
     val globalDynamicStability: Double = 0.80,
     val memoryDynamicStability: Double = 0.70,
-
     val patterns: List<MemoryPattern>,
-
     val history: List<SimulationMetrics> = emptyList()
 )
 
 object RefreshSimulationEngine {
+
+    private const val MAX_HISTORY = 500
 
     fun createInitialState(
         seed: Int = 42,
         patterns: List<MemoryPattern> = defaultPatterns()
     ): SimulationState {
 
-        validatePatterns(patterns)
+        require(patterns.isNotEmpty()) {
+            "At least one Memory Pattern is required."
+        }
 
-        val averageContinuity =
-            patterns.map { it.continuity }.average()
+        require(patterns.map { it.id }.distinct().size == patterns.size) {
+            "Memory Pattern IDs must be unique."
+        }
 
         return SimulationState(
             randomSeed = seed,
-            globalDynamicStability = 0.80,
-            memoryDynamicStability = averageContinuity,
             patterns = patterns
         )
     }
@@ -165,135 +157,94 @@ object RefreshSimulationEngine {
         config: SimulationConfig = SimulationConfig()
     ): SimulationState {
 
-        validateState(state)
-        validateConfig(config)
-
-        require(input.currentContextKey.isNotBlank()) {
-            "Current context key cannot be empty."
+        require(state.patterns.isNotEmpty()) {
+            "Memory Pattern list cannot be empty."
         }
+
+        require(
+            state.patterns.map { it.id }.distinct().size ==
+                state.patterns.size
+        ) {
+            "Memory Pattern IDs must be unique."
+        }
+
+        validateConfig(config)
 
         val condition = input.condition
 
-        // 1. Read external and internal inputs separately.
-        val externalInput = condition.externalInput
-        val internalInput = condition.internalInput
+        // 1. Calculate the combined input support.
+        // External and internal inputs belong to the same Refresh process.
+        val effectiveInputSupport = (
+            condition.externalInput * config.externalInputWeight +
+                condition.internalInput * config.internalInputWeight
+            ).coerceIn(0.0, 1.0)
 
-        // 2. Calculate the Global Dynamic Stability change.
-        //
-        // External input provides the main refresh contribution.
-        // Internal input provides weaker maintenance.
-        // When external input is absent, gradual decay continues.
-
-        val externalContribution =
-            externalInput *
-                config.globalRefreshRate *
-                (1.0 - state.globalDynamicStability)
-
-        val internalContribution =
-            internalInput *
-                config.internalMaintenanceRate *
-                (1.0 - state.globalDynamicStability)
-
-        val decay =
-            if (externalInput <= 0.0) {
-                config.globalDecayRate
-            } else {
-                0.0
-            }
-
-        val stabilityChange =
-            if (condition.refreshEnabled) {
-                externalContribution +
-                    internalContribution -
-                    decay
-            } else {
-                -config.globalDecayRate
-            }
+        // 2. Update Global Dynamic Stability.
+        // Internal-only support is weaker in this provisional model.
+        val stabilityChange = if (condition.refreshEnabled) {
+            config.globalRefreshRate *
+                effectiveInputSupport *
+                (1.0 - state.globalDynamicStability) -
+                config.globalDecayRate *
+                (1.0 - effectiveInputSupport)
+        } else {
+            -config.globalDecayRate
+        }
 
         val newGlobalStability = (
             state.globalDynamicStability + stabilityChange
-        ).coerceIn(0.0, 1.0)
+            ).coerceIn(0.0, 1.0)
 
-        // 3. Calculate the shared refresh level.
-        //
-        // Every memory pattern receives shared refresh exposure.
-        // Internal input contributes less than external input.
-
-        val sharedInputSupport = (
-            externalInput +
-                internalInput *
-                config.internalMaintenanceRate /
-                config.globalRefreshRate
-        ).coerceIn(0.0, 1.0)
-
-        val sharedRefresh =
-            if (condition.refreshEnabled) {
-                newGlobalStability * sharedInputSupport
-            } else {
-                0.0
-            }
-
-        // 4. Calculate memory activation probabilities.
-
+        // 3. Calculate activation probabilities.
         val probabilities = calculateProbabilities(
             patterns = state.patterns,
             currentContextKey = input.currentContextKey,
             config = config,
-            random = Random(
-                state.randomSeed.toLong() + state.step.toLong()
-            )
+            random = Random(state.randomSeed + state.step)
         )
 
-        // 5. Select one memory pattern probabilistically.
-
+        // 4. Select one Memory Pattern probabilistically.
         val selectedId = selectPattern(
             patterns = state.patterns,
             probabilities = probabilities,
-            random = Random(
-                state.randomSeed.toLong() +
-                    state.step.toLong() +
-                    1000L
-            )
+            random = Random(state.randomSeed + state.step + 1000)
         )
 
-        // 6. Update ALL Memory Patterns.
-        //
-        // Shared refresh affects every pattern.
-        // The selected pattern receives additional reinforcement.
+        // 5. All patterns participate in shared Refresh.
+        // Selection adds an additional activation effect to one pattern.
+        val sharedRefresh = if (condition.refreshEnabled) {
+            effectiveInputSupport * newGlobalStability
+        } else {
+            0.0
+        }
 
         val updatedPatterns = state.patterns.map { pattern ->
 
             val selected = pattern.id == selectedId
 
-            val activationGain =
-                if (selected) {
-                    config.activationReinforcement
-                } else {
-                    0.0
-                }
+            val activationGain = if (selected) {
+                config.activationReinforcement
+            } else {
+                0.0
+            }
 
             val strengthChange =
                 config.sharedMemoryRefreshGain * sharedRefresh -
-                    config.memoryDecayRate *
-                    (1.0 - sharedRefresh) +
+                    config.memoryDecayRate * (1.0 - sharedRefresh) +
                     activationGain
 
             val continuityChange =
                 config.sharedContinuityGain * sharedRefresh -
-                    config.continuityDecayRate *
-                    (1.0 - sharedRefresh)
-
-            val newStrength = (
-                pattern.strength + strengthChange
-            ).coerceIn(0.0, 1.0)
-
-            val newContinuity = (
-                pattern.continuity + continuityChange
-            ).coerceIn(0.0, 1.0)
+                    config.continuityDecayRate * (1.0 - sharedRefresh)
 
             pattern.copy(
-                strength = newStrength,
-                continuity = newContinuity,
+                strength = (
+                    pattern.strength + strengthChange
+                    ).coerceIn(0.0, 1.0),
+
+                continuity = (
+                    pattern.continuity + continuityChange
+                    ).coerceIn(0.0, 1.0),
 
                 activationProbability =
                     probabilities[pattern.id] ?: 0.0,
@@ -304,59 +255,37 @@ object RefreshSimulationEngine {
             )
         }
 
-        // 7. Estimate collective Memory Dynamic Stability.
-        //
-        // This is a provisional measurement:
-        // average continuity of all memory patterns.
-
+        // 6. Provisional collective Memory Dynamic Stability measure.
         val averageContinuity =
             updatedPatterns.map { it.continuity }.average()
 
         val newMemoryStability =
             averageContinuity.coerceIn(0.0, 1.0)
 
-        // 8. Record experiment measurements.
-
         val selectedProbability =
             probabilities[selectedId] ?: 0.0
 
+        // 7. Save experiment measurements.
         val metrics = SimulationMetrics(
             step = state.step + 1,
-
-            globalDynamicStability =
-                newGlobalStability,
-
-            memoryDynamicStability =
-                newMemoryStability,
-
+            globalDynamicStability = newGlobalStability,
+            memoryDynamicStability = newMemoryStability,
             averageMemoryStrength =
                 updatedPatterns.map { it.strength }.average(),
-
-            averagePatternContinuity =
-                averageContinuity,
-
-            selectedPatternId =
-                selectedId,
-
-            selectedPatternProbability =
-                selectedProbability
+            averagePatternContinuity = averageContinuity,
+            selectedPatternId = selectedId,
+            selectedPatternProbability = selectedProbability,
+            externalInput = condition.externalInput,
+            internalInput = condition.internalInput,
+            effectiveInputSupport = effectiveInputSupport
         )
-
-        // 9. Return the updated state.
-        // Previous state remains unchanged.
 
         return state.copy(
             step = state.step + 1,
-
-            globalDynamicStability =
-                newGlobalStability,
-
-            memoryDynamicStability =
-                newMemoryStability,
-
+            globalDynamicStability = newGlobalStability,
+            memoryDynamicStability = newMemoryStability,
             patterns = updatedPatterns,
-
-            history = state.history + metrics
+            history = (state.history + metrics).takeLast(MAX_HISTORY)
         )
     }
 
@@ -385,10 +314,9 @@ object RefreshSimulationEngine {
                     config.contextSelectionWeight *
                     pattern.strength
 
-            val totalWeight =
+            pattern.id to (
                 randomComponent + contextComponent
-
-            pattern.id to totalWeight.coerceAtLeast(0.000001)
+                ).coerceAtLeast(0.000001)
         }
 
         val totalWeight = weights.values.sum()
@@ -408,11 +336,9 @@ object RefreshSimulationEngine {
         var cumulative = 0.0
 
         for (pattern in patterns) {
+            cumulative += probabilities[pattern.id] ?: 0.0
 
-            cumulative +=
-                probabilities[pattern.id] ?: 0.0
-
-            if (draw < cumulative) {
+            if (draw <= cumulative) {
                 return pattern.id
             }
         }
@@ -420,57 +346,20 @@ object RefreshSimulationEngine {
         return patterns.last().id
     }
 
-    private fun validatePatterns(
-        patterns: List<MemoryPattern>
-    ) {
-        require(patterns.isNotEmpty()) {
-            "At least one Memory Pattern is required."
-        }
-
-        require(patterns.map { it.id }.distinct().size == patterns.size) {
-            "Memory Pattern IDs must be unique."
-        }
-
-        patterns.forEach { pattern ->
-
-            require(pattern.name.isNotBlank()) {
-                "Memory Pattern name cannot be empty."
-            }
-
-            require(pattern.contextKey.isNotBlank()) {
-                "Memory Pattern context cannot be empty."
-            }
-
-            require(pattern.strength in 0.0..1.0)
-            require(pattern.continuity in 0.0..1.0)
-            require(pattern.activationProbability in 0.0..1.0)
-            require(pattern.activationCount >= 0)
-        }
-    }
-
-    private fun validateState(state: SimulationState) {
-
-        require(state.step >= 0) {
-            "Simulation step cannot be negative."
-        }
-
-        require(state.globalDynamicStability in 0.0..1.0) {
-            "Global Dynamic Stability must be between 0 and 1."
-        }
-
-        require(state.memoryDynamicStability in 0.0..1.0) {
-            "Memory Dynamic Stability must be between 0 and 1."
-        }
-
-        validatePatterns(state.patterns)
-    }
-
     private fun validateConfig(config: SimulationConfig) {
+
+        require(config.externalInputWeight in 0.0..1.0)
+        require(config.internalInputWeight in 0.0..1.0)
+
+        require(
+            config.externalInputWeight +
+                config.internalInputWeight > 0.0
+        ) {
+            "At least one input weight must be positive."
+        }
 
         require(config.globalRefreshRate in 0.0..1.0)
         require(config.globalDecayRate in 0.0..1.0)
-
-        require(config.internalMaintenanceRate in 0.0..1.0)
 
         require(config.sharedMemoryRefreshGain in 0.0..1.0)
         require(config.memoryDecayRate in 0.0..1.0)
@@ -479,7 +368,6 @@ object RefreshSimulationEngine {
         require(config.continuityDecayRate in 0.0..1.0)
 
         require(config.activationReinforcement in 0.0..1.0)
-
         require(config.randomSelectionWeight >= 0.0)
         require(config.contextSelectionWeight >= 0.0)
     }
