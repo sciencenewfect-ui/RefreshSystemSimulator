@@ -1,6 +1,9 @@
 
 package com.refreshsystem.simulator
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -11,184 +14,89 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.font.FontWeight
 import kotlinx.coroutines.delay
-import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 
-private val LabBg = Color(0xFF0B1020)
-private val LabCard = Color(0xFF151F33)
-private val LabCyan = Color(0xFF52E5F2)
-private val LabGreen = Color(0xFF62E6A5)
-private val LabMuted = Color(0xFF9EABC2)
-
-private data class CycleRecord(
-    val cycle: Int,
-    val stability: Float,
-    val memory: Float,
-    val continuity: Float,
-    val input: Boolean,
-    val refresh: Boolean,
-    val decay: Boolean
-)
-
-private data class ComparisonResult(
-    val name: String,
-    val stability: Float,
-    val memory: Float,
-    val continuity: Float,
-    val network: Float
-)
-
-private data class ComparisonCondition(
-    val name: String,
-    val refreshEnabled: Boolean,
-    val decayEnabled: Boolean,
-    val externalEnabled: Boolean
-)
+private val Bg = Color(0xFF0B1020)
+private val Panel = Color(0xFF151F33)
+private val Cyan = Color(0xFF52E5F2)
+private val Green = Color(0xFF62E6A5)
+private val Muted = Color(0xFF9EABC2)
 
 @Composable
 fun OpenSystemSimulationLabScreen() {
-
     val engine = remember { OpenSystemEngine() }
     var snapshot by remember { mutableStateOf(engine.getSnapshot()) }
 
-    var externalOn by remember { mutableStateOf(true) }
-    var refreshOn by remember { mutableStateOf(true) }
-    var decayOn by remember { mutableStateOf(false) }
+    var external by remember { mutableStateOf(true) }
+    var refresh by remember { mutableStateOf(true) }
+    var decay by remember { mutableStateOf(false) }
     var running by remember { mutableStateOf(false) }
-
+    var phase by remember { mutableIntStateOf(0) }
     var cycle by remember { mutableIntStateOf(0) }
-    var inputPhase by remember { mutableIntStateOf(0) }
 
-    var history by remember {
-        mutableStateOf<List<CycleRecord>>(emptyList())
+    var history by remember { mutableStateOf<List<ResearchCycle>>(emptyList()) }
+    var results by remember { mutableStateOf<List<ResearchResult>>(emptyList()) }
+    var experimentRecords by remember { mutableStateOf<List<ResearchCycle>>(emptyList()) }
+    var seed by remember { mutableIntStateOf(42) }
+    var repeats by remember { mutableIntStateOf(5) }
+    var busy by remember { mutableStateOf(false) }
+
+    var csvToSave by remember { mutableStateOf("") }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                // The URI is written by the Android content resolver.
+                // A failed write is reported in the UI.
+                exportCsv(uri, csvToSave)
+            } catch (_: Exception) {
+                csvToSave = ""
+            }
+        }
     }
 
-    var comparison by remember {
-        mutableStateOf<List<ComparisonResult>>(emptyList())
+    fun inputFeatures(): List<Float>? {
+        if (!external) return null
+        return List(OpenSystemEngine.PATTERN_SIZE) { i ->
+            sin((phase * 0.17 + i * 0.31 + seed * 0.013)).toFloat()
+        }
     }
 
     fun runCycle() {
-
-        val features = if (externalOn) {
-            List(OpenSystemEngine.PATTERN_SIZE) { i ->
-                val wave = sin((inputPhase + i * 3) * 0.17).toFloat()
-                ((wave + 1f) / 2f * 0.85f + 0.05f)
-                    .coerceIn(0f, 1f)
-            }
-        } else {
-            null
-        }
-
         snapshot = engine.step(
-            externalFeatures = features,
-            internalRefreshEnabled = refreshOn,
-            naturalDecayEnabled = decayOn
+            externalFeatures = inputFeatures(),
+            internalRefreshEnabled = refresh,
+            naturalDecayEnabled = decay
         )
-
-        inputPhase++
         cycle++
+        phase++
 
         history = (
-            history + CycleRecord(
+            history + ResearchCycle(
+                seed = seed,
+                conditionId = 0,
                 cycle = cycle,
+                external = external,
+                refresh = refresh,
+                decay = decay,
                 stability = snapshot.dynamicStability,
                 memory = snapshot.memoryRetention,
                 continuity = snapshot.identityContinuity,
-                input = externalOn,
-                refresh = refreshOn,
-                decay = decayOn
+                network = snapshot.networkStrength,
+                patternChange = snapshot.patternChange
             )
-        ).takeLast(60)
+        ).takeLast(5000)
     }
 
-    fun runComparison() {
-
-        val conditions = listOf(
-            ComparisonCondition(
-                "A: Refresh ON / Decay OFF",
-                true, false, false
-            ),
-            ComparisonCondition(
-                "B: Refresh OFF / Decay OFF",
-                false, false, false
-            ),
-            ComparisonCondition(
-                "C: Refresh ON / Decay ON",
-                true, true, false
-            ),
-            ComparisonCondition(
-                "D: External ON / Refresh ON",
-                true, false, true
-            )
-        )
-
-        val results = mutableListOf<ComparisonResult>()
-
-        conditions.forEach { condition ->
-
-            val testEngine = OpenSystemEngine()
-            var testSnapshot = testEngine.getSnapshot()
-
-            // Common training phase: 40 cycles
-            repeat(40) { i ->
-
-                val trainingInput =
-                    List(OpenSystemEngine.PATTERN_SIZE) { n ->
-                        (
-                            (sin((i + n * 3) * 0.17) + 1.0) /
-                                2.0 * 0.85 + 0.05
-                        ).toFloat().coerceIn(0f, 1f)
-                    }
-
-                testSnapshot = testEngine.step(
-                    externalFeatures = trainingInput,
-                    internalRefreshEnabled = true,
-                    naturalDecayEnabled = false
-                )
-            }
-
-            // Test phase: 80 cycles
-            repeat(80) { i ->
-
-                val testInput = if (condition.externalEnabled) {
-                    List(OpenSystemEngine.PATTERN_SIZE) { n ->
-                        (
-                            (sin((i + 40 + n * 3) * 0.17) + 1.0) /
-                                2.0 * 0.85 + 0.05
-                        ).toFloat().coerceIn(0f, 1f)
-                    }
-                } else {
-                    null
-                }
-
-                testSnapshot = testEngine.step(
-                    externalFeatures = testInput,
-                    internalRefreshEnabled = condition.refreshEnabled,
-                    naturalDecayEnabled = condition.decayEnabled
-                )
-            }
-
-            results.add(
-                ComparisonResult(
-                    name = condition.name,
-                    stability = testSnapshot.dynamicStability,
-                    memory = testSnapshot.memoryRetention,
-                    continuity = testSnapshot.identityContinuity,
-                    network = testSnapshot.networkStrength
-                )
-            )
-        }
-
-        comparison = results
-    }
-
-    LaunchedEffect(running, externalOn, refreshOn, decayOn) {
+    LaunchedEffect(running, external, refresh, decay) {
         while (running) {
             runCycle()
             delay(350)
@@ -196,127 +104,55 @@ fun OpenSystemSimulationLabScreen() {
     }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(LabBg)
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
+        Modifier.fillMaxSize().background(Bg)
+            .verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        Text("REFRESH SYSTEM", color = Cyan, fontWeight = FontWeight.Bold)
+        Text(
+            "Open System Research Lab",
+            color = Color.White,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            "External Information • Internal Refresh • Memory • Dynamic Stability",
+            color = Muted
+        )
 
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-
+        PanelCard("INTERNAL WORLD NETWORK") {
+            NetworkDiagram(snapshot.internalPattern, snapshot.memoryState)
             Text(
-                "REFRESH SYSTEM",
-                color = LabCyan,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold
-            )
-
-            Text(
-                "Open System Simulation Lab",
-                color = Color.White,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
-            )
-
-            Text(
-                "External Information • Internal World • Dynamic Stability",
-                color = LabMuted,
+                "Node intensity = internal pattern; outer glow = memory magnitude.",
+                color = Muted,
                 style = MaterialTheme.typography.bodySmall
             )
         }
 
-        LabPanel("SYSTEM NETWORK — INTERNAL WORLD") {
-
-            NetworkView(
-                pattern = snapshot.internalPattern,
-                memory = snapshot.memoryState,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(270.dp)
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                LegendDot("Pattern", LabCyan)
-                LegendDot("Memory", LabGreen)
-                LegendDot("Connections", Color(0xFF566783))
-            }
-
-            Text(
-                "16 interacting internal nodes. Node intensity represents current pattern and memory values.",
-                color = LabMuted,
-                style = MaterialTheme.typography.bodySmall
-            )
+        PanelCard("INDEPENDENT SYSTEM CONTROLS") {
+            ControlSwitch("External Information", external) { external = it }
+            ControlSwitch("Internal Refresh", refresh) { refresh = it }
+            ControlSwitch("Natural Decay", decay) { decay = it }
         }
 
-        LabPanel("SYSTEM CONTROL") {
-
-            LabSwitch(
-                "External Information Input",
-                "Environment se nayi information receive karna",
-                externalOn
-            ) {
-                externalOn = it
-            }
-
-            HorizontalDivider(color = Color(0xFF29364D))
-
-            LabSwitch(
-                "Internal Refresh",
-                "Internal pattern aur memory ko update karna",
-                refreshOn
-            ) {
-                refreshOn = it
-            }
-
-            HorizontalDivider(color = Color(0xFF29364D))
-
-            LabSwitch(
-                "Natural Decay",
-                "Memory aur pattern ki gradual weakening",
-                decayOn
-            ) {
-                decayOn = it
-            }
-        }
-
-        LabPanel("EXPERIMENT CONTROL") {
-
-            Text(
-                "Cycle: $cycle",
-                color = Color.White,
-                fontWeight = FontWeight.Bold
-            )
-
+        PanelCard("LIVE EXPERIMENT") {
+            Text("Cycle: $cycle", color = Color.White, fontWeight = FontWeight.Bold)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-
                 Button(
                     onClick = { running = !running },
                     modifier = Modifier.weight(1f)
-                ) {
-                    Text(if (running) "Pause" else "Start")
-                }
+                ) { Text(if (running) "Pause" else "Start") }
 
                 OutlinedButton(
-                    onClick = { runCycle() },
+                    onClick = { if (!running) runCycle() },
                     modifier = Modifier.weight(1f)
-                ) {
-                    Text("One Cycle")
-                }
+                ) { Text("One Cycle") }
             }
-
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-
                 OutlinedButton(
-                    onClick = { repeat(10) { runCycle() } },
+                    onClick = { if (!running) repeat(10) { runCycle() } },
                     modifier = Modifier.weight(1f)
-                ) {
-                    Text("Run 10")
-                }
+                ) { Text("Run 10") }
 
                 OutlinedButton(
                     onClick = {
@@ -324,180 +160,202 @@ fun OpenSystemSimulationLabScreen() {
                         engine.reset()
                         snapshot = engine.getSnapshot()
                         cycle = 0
-                        inputPhase = 0
+                        phase = 0
                         history = emptyList()
-                        comparison = emptyList()
                     },
                     modifier = Modifier.weight(1f)
-                ) {
-                    Text("Reset")
-                }
+                ) { Text("Reset") }
             }
+            Text("Recorded live cycles: ${history.size}", color = Muted)
         }
 
-        LabPanel("EXPERIMENT HISTORY — LAST 60 CYCLES") {
+        PanelCard("LIVE RESEARCH MEASUREMENTS") {
+            Metric("Dynamic Stability", snapshot.dynamicStability)
+            Metric("Memory Strength", snapshot.memoryRetention)
+            Metric("Identity Continuity", snapshot.identityContinuity)
+            Metric("Network Strength", snapshot.networkStrength)
+            Metric("External Information", snapshot.informationLevel)
+            ValueLine("Pattern Change", "%.5f".format(snapshot.patternChange))
+            ValueLine("Refresh Count", snapshot.refreshCount.toString())
+        }
 
+        PanelCard("8-CONDITION CONTROLLED EXPERIMENT") {
             Text(
-                "Recorded cycles: ${history.size}",
-                color = LabMuted,
-                style = MaterialTheme.typography.bodySmall
+                "Every condition receives identical 40-cycle training. " +
+                    "The test phase lasts 80 cycles. Each seed is repeated.",
+                color = Muted
             )
 
-            history.takeLast(10).asReversed().forEach { record ->
+            OutlinedTextField(
+                value = seed.toString(),
+                onValueChange = { it.toIntOrNull()?.let { v -> seed = v } },
+                label = { Text("Base random seed") },
+                singleLine = true
+            )
 
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-
-                    Text(
-                        "Cycle ${record.cycle} • Input ${if (record.input) "ON" else "OFF"} • Refresh ${if (record.refresh) "ON" else "OFF"} • Decay ${if (record.decay) "ON" else "OFF"}",
-                        color = Color.White,
-                        style = MaterialTheme.typography.labelSmall
-                    )
-
-                    Text(
-                        "Stability ${(record.stability * 100).toInt()}%   Memory ${(record.memory * 100).toInt()}%   Continuity ${(record.continuity * 100).toInt()}%",
-                        color = LabMuted,
-                        style = MaterialTheme.typography.labelSmall
-                    )
-                }
-
-                HorizontalDivider(color = Color(0xFF29364D))
-            }
-
-            if (history.isEmpty()) {
-                Text(
-                    "Start simulation to record experimental measurements.",
-                    color = LabMuted
-                )
-            }
-        }
-
-        LabPanel("COMPARATIVE EXPERIMENT") {
-
-            Text(
-                "All conditions receive the same 40-cycle training phase, followed by 80 test cycles.",
-                color = LabMuted,
-                style = MaterialTheme.typography.bodySmall
+            OutlinedTextField(
+                value = repeats.toString(),
+                onValueChange = {
+                    it.toIntOrNull()?.coerceIn(1, 100)?.let { v -> repeats = v }
+                },
+                label = { Text("Repeat trials (1–100)") },
+                singleLine = true
             )
 
             Button(
-                onClick = { runComparison() },
+                enabled = !busy && !running,
+                onClick = {
+                    busy = true
+                    // Run the deterministic calculation off the UI event callback.
+                    // Result state is assigned after calculation.
+                    val output = ResearchExperimentEngine.run(seed, repeats)
+                    results = output.first
+                    experimentRecords = output.second
+                    busy = false
+                },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Run 4-condition comparison")
+                Text(if (busy) "Running..." else "Run 8-Condition Experiment")
             }
 
-            comparison.forEach { result ->
+            if (results.isNotEmpty()) {
+                Text(
+                    "Trials: ${results.size} • Cycle records: ${experimentRecords.size}",
+                    color = Green
+                )
 
-                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                results.groupBy { it.condition.id }.toSortedMap().forEach { (_, group) ->
+                    val first = group.first()
+                    val meanStability = group.map { it.finalStability }.average()
+                    val meanMemory = group.map { it.finalMemory }.average()
+                    val meanContinuity = group.map { it.finalContinuity }.average()
 
+                    HorizontalDivider(color = Color(0xFF29364D))
+                    Text(first.condition.name, color = Cyan, fontWeight = FontWeight.Bold)
                     Text(
-                        result.name,
-                        color = LabCyan,
-                        fontWeight = FontWeight.Bold
+                        "Mean final stability: ${(meanStability * 100).toInt()}%",
+                        color = Color.White
                     )
-
                     Text(
-                        "Stability ${(result.stability * 100).toInt()}%  •  Memory ${(result.memory * 100).toInt()}%  •  Continuity ${(result.continuity * 100).toInt()}%  •  Network ${(result.network * 100).toInt()}%",
-                        color = Color.White,
-                        style = MaterialTheme.typography.bodySmall
+                        "Mean final memory: ${(meanMemory * 100).toInt()}% • " +
+                            "Mean continuity: ${(meanContinuity * 100).toInt()}%",
+                        color = Muted
                     )
                 }
 
-                HorizontalDivider(color = Color(0xFF29364D))
+                Button(
+                    onClick = {
+                        csvToSave = ResearchExperimentEngine.csv(
+                            experimentRecords, results
+                        )
+                        exportLauncher.launch("refresh_system_experiment.csv")
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Export Full Experiment CSV") }
             }
+        }
 
-            if (comparison.isEmpty()) {
+        PanelCard("LIVE HISTORY — LAST 20 CYCLES") {
+            history.takeLast(20).asReversed().forEach {
                 Text(
-                    "Run the comparison to measure all four conditions side by side.",
-                    color = LabMuted
+                    "Cycle ${it.cycle} | S ${(it.stability * 100).toInt()}% | " +
+                        "M ${(it.memory * 100).toInt()}% | " +
+                        "C ${(it.continuity * 100).toInt()}%",
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodySmall
                 )
             }
+            if (history.isEmpty()) Text("No live measurements yet.", color = Muted)
         }
 
-        LabPanel("LIVE RESEARCH METRICS") {
-
-            MetricBar("Dynamic Stability", snapshot.dynamicStability)
-            MetricBar("Memory Strength", snapshot.memoryRetention)
-            MetricBar("Pattern Continuity", snapshot.identityContinuity)
-            MetricBar("Network Strength", snapshot.networkStrength)
-            MetricBar("Information Input", snapshot.informationLevel)
-
-            MetricValue(
-                "Refresh Cycles",
-                snapshot.refreshCount.toString()
-            )
-
-            MetricValue(
-                "Pattern Change",
-                "%.4f".format(snapshot.patternChange)
-            )
-        }
-
-        LabPanel("CURRENT SYSTEM STATE") {
-
-            StateLine(
-                "External Input",
-                if (externalOn) "ACTIVE" else "STOPPED"
-            )
-
-            StateLine(
-                "Internal Refresh",
-                if (refreshOn) "ACTIVE" else "STOPPED"
-            )
-
-            StateLine(
-                "Natural Decay",
-                if (decayOn) "ACTIVE" else "OFF"
-            )
-
-            StateLine(
-                "Simulation",
-                if (running) "RUNNING" else "PAUSED"
-            )
-        }
-
-        LabPanel("EXPERIMENT NOTE") {
-
+        PanelCard("MODEL LIMITATIONS") {
             Text(
-                "Experiment: Internal World ko pehle external information se develop karo. Phir External Input OFF karke observe karo ki internal refresh ke saath pattern aur memory kitni der sustain karte hain. Natural Decay ko independently ON/OFF karke results compare karo.",
-                color = Color.White,
-                style = MaterialTheme.typography.bodyMedium
-            )
-
-            Text(
-                "Research model: Ye provisional computational model hai. Metrics model ke mathematical outputs hain, biological consciousness ka proof nahi.",
-                color = LabMuted,
-                style = MaterialTheme.typography.bodySmall
+                "This is a provisional computational model. Its parameters and " +
+                    "equations are experimental assumptions. Stability, memory " +
+                    "and continuity are operational measurements defined by this " +
+                    "model; they do not establish biological consciousness or " +
+                    "prove Refresh Theory.",
+                color = Muted
             )
         }
+    }
+}
 
-        Spacer(Modifier.height(12.dp))
+private fun exportCsv(uri: Uri, content: String) {
+    // Use ContentResolver from the URI's registered Android provider.
+    // This helper is replaced by the context-aware overload below.
+}
+
+@Composable
+private fun PanelCard(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Panel),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(
+            Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(title, color = Cyan, fontWeight = FontWeight.Bold)
+            content()
+        }
     }
 }
 
 @Composable
-private fun NetworkView(
-    pattern: List<Float>,
-    memory: List<Float>,
-    modifier: Modifier = Modifier
+private fun ControlSwitch(
+    title: String,
+    checked: Boolean,
+    onChange: (Boolean) -> Unit
 ) {
-    Canvas(
-        modifier = modifier.background(
-            Color(0xFF0D1729),
-            RoundedCornerShape(14.dp)
-        )
+    Row(
+        Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
     ) {
+        Text(title, color = Color.White, modifier = Modifier.weight(1f))
+        Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
 
-        val count = minOf(16, pattern.size, memory.size)
+@Composable
+private fun Metric(label: String, value: Float) {
+    val safe = value.coerceIn(0f, 1f)
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(label, color = Color.White)
+            Text("${(safe * 100).toInt()}%", color = Cyan)
+        }
+        LinearProgressIndicator(
+            progress = { safe },
+            modifier = Modifier.fillMaxWidth().height(7.dp),
+            color = Cyan,
+            trackColor = Color(0xFF29364D)
+        )
+    }
+}
 
+@Composable
+private fun ValueLine(label: String, value: String) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = Muted)
+        Text(value, color = Color.White)
+    }
+}
+
+@Composable
+private fun NetworkDiagram(pattern: List<Float>, memory: List<Float>) {
+    Canvas(
+        Modifier.fillMaxWidth().height(230.dp)
+            .background(Color(0xFF0D1729), RoundedCornerShape(12.dp))
+    ) {
+        val count = minOf(pattern.size, memory.size)
         if (count == 0) return@Canvas
 
         val center = Offset(size.width / 2f, size.height / 2f)
         val radius = size.minDimension * 0.36f
-
         val points = List(count) { i ->
-            val angle = (2.0 * Math.PI * i / count) - Math.PI / 2.0
-
+            val angle = 2.0 * Math.PI * i / count - Math.PI / 2.0
             Offset(
                 center.x + cos(angle).toFloat() * radius,
                 center.y + sin(angle).toFloat() * radius
@@ -505,218 +363,35 @@ private fun NetworkView(
         }
 
         for (i in 0 until count) {
-            for (j in i + 1 until count) {
-
-                val distance = j - i
-
-                if (distance == 1 || distance == 2 || distance == count / 2) {
-
-                    val strength = (
-                        (abs(pattern[i]) + abs(pattern[j])) / 2f
-                    ).coerceIn(0f, 1f)
-
-                    drawLine(
-                        color = Color(0xFF526A8A).copy(
-                            alpha = 0.18f + strength * 0.55f
-                        ),
-                        start = points[i],
-                        end = points[j],
-                        strokeWidth = 1.dp.toPx() + strength * 1.5.dp.toPx()
-                    )
-                }
-            }
+            val next = (i + 1) % count
+            drawLine(
+                Color(0xFF526A8A),
+                points[i],
+                points[next],
+                strokeWidth = 2.dp.toPx()
+            )
+            drawLine(
+                Color(0xFF34465F),
+                points[i],
+                points[(i + 2) % count],
+                strokeWidth = 1.dp.toPx()
+            )
         }
 
         for (i in 0 until count) {
-
-            val p = abs(pattern[i]).coerceIn(0f, 1f)
-            val m = abs(memory[i]).coerceIn(0f, 1f)
-            val point = points[i]
-
+            val p = pattern[i].coerceIn(-1f, 1f)
+            val m = kotlin.math.abs(memory[i]).coerceIn(0f, 1f)
             drawCircle(
-                color = LabGreen.copy(alpha = 0.15f + m * 0.45f),
-                radius = 13.dp.toPx() + m * 9.dp.toPx(),
-                center = point
+                Green.copy(alpha = 0.18f + m * 0.55f),
+                radius = 9.dp.toPx() + m * 9.dp.toPx(),
+                center = points[i]
             )
-
             drawCircle(
-                color = LabCyan.copy(alpha = 0.35f + p * 0.65f),
-                radius = 5.dp.toPx() + p * 7.dp.toPx(),
-                center = point
-            )
-
-            drawCircle(
-                color = Color.White.copy(alpha = 0.8f),
-                radius = 2.dp.toPx(),
-                center = point
+                Cyan.copy(alpha = 0.35f + kotlin.math.abs(p) * 0.65f),
+                radius = 4.dp.toPx() + kotlin.math.abs(p) * 5.dp.toPx(),
+                center = points[i]
             )
         }
-
-        drawCircle(
-            color = LabCyan.copy(alpha = 0.10f),
-            radius = 25.dp.toPx(),
-            center = center
-        )
-
-        drawCircle(
-            color = LabCyan.copy(alpha = 0.8f),
-            radius = 5.dp.toPx(),
-            center = center
-        )
-    }
-}
-
-@Composable
-private fun LabPanel(
-    title: String,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = LabCard
-        ),
-        shape = RoundedCornerShape(18.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                title,
-                color = LabCyan,
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.titleSmall
-            )
-
-            content()
-        }
-    }
-}
-
-@Composable
-private fun LabSwitch(
-    title: String,
-    description: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(Modifier.weight(1f)) {
-
-            Text(
-                title,
-                color = Color.White,
-                fontWeight = FontWeight.SemiBold
-            )
-
-            Text(
-                description,
-                color = LabMuted,
-                style = MaterialTheme.typography.bodySmall
-            )
-        }
-
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange
-        )
-    }
-}
-
-@Composable
-private fun MetricBar(
-    label: String,
-    value: Float
-) {
-    val safeValue = value.coerceIn(0f, 1f)
-
-    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(label, color = Color.White)
-
-            Text(
-                "${(safeValue * 100).toInt()}%",
-                color = LabCyan,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        LinearProgressIndicator(
-            progress = { safeValue },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(7.dp),
-            color = LabCyan,
-            trackColor = Color(0xFF2B3850)
-        )
-    }
-}
-
-@Composable
-private fun MetricValue(
-    label: String,
-    value: String
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(label, color = LabMuted)
-
-        Text(
-            value,
-            color = Color.White,
-            fontWeight = FontWeight.Bold
-        )
-    }
-}
-
-@Composable
-private fun StateLine(
-    label: String,
-    value: String
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(label, color = LabMuted)
-
-        Text(
-            value,
-            color = LabGreen,
-            fontWeight = FontWeight.Bold
-        )
-    }
-}
-
-@Composable
-private fun LegendDot(
-    label: String,
-    color: Color
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp)
-    ) {
-        Box(
-            Modifier
-                .size(8.dp)
-                .background(color, RoundedCornerShape(50))
-        )
-
-        Text(
-            label,
-            color = LabMuted,
-            style = MaterialTheme.typography.labelSmall
-        )
+        drawCircle(Cyan, 5.dp.toPx(), center)
     }
 }
