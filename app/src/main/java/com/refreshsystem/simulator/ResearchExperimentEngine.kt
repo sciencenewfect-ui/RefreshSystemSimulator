@@ -24,7 +24,19 @@ data class ResearchResult(
     val memoryCurve: List<Float>,
     val finalMemoryFidelity: Float,
     val meanMemoryFidelity: Float,
-    val memoryFidelityCurve: List<Float>
+    val memoryFidelityCurve: List<Float>,
+
+    val finalEnergy: Float = 0f,
+    val finalMatter: Float = 0f,
+    val finalResourceSupport: Float = 0f,
+    val finalNaturalStability: Float = 0f,
+    val finalInternalWorldStability: Float = 0f,
+    val finalChetnaIndex: Float = 0f,
+    val meanEnergy: Float = 0f,
+    val meanMatter: Float = 0f,
+    val meanNaturalStability: Float = 0f,
+    val meanInternalWorldStability: Float = 0f,
+    val meanChetnaIndex: Float = 0f
 )
 
 data class ResearchCycle(
@@ -40,13 +52,20 @@ data class ResearchCycle(
     val network: Float,
     val patternChange: Float,
     val phase: String = "TEST",
-    val memoryFidelity: Float = -1f
+    val memoryFidelity: Float = -1f,
+
+    val energy: Float = 0f,
+    val matter: Float = 0f,
+    val resourceSupport: Float = 0f,
+    val naturalStability: Float = 0f,
+    val internalWorldStability: Float = 0f,
+    val chetnaIndex: Float = 0f
 )
 
 object ResearchExperimentEngine {
 
     const val TRAINING_CYCLES = 40
-    const val TEST_CYCLES = 80
+    const val TEST_CYCLES = 500
     const val DEFAULT_REPEATS = 5
 
     val conditions = listOf(
@@ -66,8 +85,6 @@ object ResearchExperimentEngine {
             kotlin.math.sin(phase).toFloat().coerceIn(-1f, 1f)
         }
 
-    // Cosine similarity compares memory pattern direction, independently
-    // of its overall magnitude. Result range: -1 to +1.
     private fun calculateMemoryFidelity(
         baseline: List<Float>,
         current: List<Float>
@@ -89,14 +106,16 @@ object ResearchExperimentEngine {
             return 0f
         }
 
-        return (dot / (sqrt(baselineEnergy) * sqrt(currentEnergy)))
-            .coerceIn(-1f, 1f)
+        return (
+            dot / (sqrt(baselineEnergy) * sqrt(currentEnergy))
+        ).coerceIn(-1f, 1f)
     }
 
     fun run(
         baseSeed: Int = 42,
         repeats: Int = DEFAULT_REPEATS
     ): Pair<List<ResearchResult>, List<ResearchCycle>> {
+
         require(repeats in 1..100)
 
         val results = mutableListOf<ResearchResult>()
@@ -104,12 +123,14 @@ object ResearchExperimentEngine {
 
         conditions.forEach { condition ->
             repeat(repeats) { repeatIndex ->
+
                 val seed = baseSeed + repeatIndex
                 val engine = OpenSystemEngine(seed)
                 var current = engine.getSnapshot()
 
                 // PHASE 1: IDENTICAL TRAINING FOR ALL CONDITIONS.
                 repeat(TRAINING_CYCLES) { index ->
+
                     current = engine.step(
                         externalFeatures = inputFor(index, seed),
                         internalRefreshEnabled = true,
@@ -129,12 +150,17 @@ object ResearchExperimentEngine {
                             continuity = current.identityContinuity,
                             network = current.networkStrength,
                             patternChange = current.patternChange,
-                            phase = "TRAINING"
+                            phase = "TRAINING",
+                            energy = current.energyReserve,
+                            matter = current.matterReserve,
+                            resourceSupport = current.resourceSupport,
+                            naturalStability = current.naturalDynamicStability,
+                            internalWorldStability = current.internalWorldStability,
+                            chetnaIndex = current.chetnaHypothesisIndex
                         )
                     )
                 }
 
-                // Save the actual trained memory vector as fidelity baseline.
                 val trainingMemoryPattern = current.memoryState.toList()
                 val trainingEndMemory = current.memoryRetention
 
@@ -144,7 +170,14 @@ object ResearchExperimentEngine {
                 val memoryCurve = mutableListOf<Float>()
                 val fidelityCurve = mutableListOf<Float>()
 
+                val energyValues = mutableListOf<Float>()
+                val matterValues = mutableListOf<Float>()
+                val naturalStabilityValues = mutableListOf<Float>()
+                val internalWorldValues = mutableListOf<Float>()
+                val chetnaValues = mutableListOf<Float>()
+
                 repeat(TEST_CYCLES) { index ->
+
                     val testCycle = TRAINING_CYCLES + index
 
                     val features = if (condition.external) {
@@ -169,6 +202,12 @@ object ResearchExperimentEngine {
                     memoryCurve.add(current.memoryRetention)
                     fidelityCurve.add(fidelity)
 
+                    energyValues.add(current.energyReserve)
+                    matterValues.add(current.matterReserve)
+                    naturalStabilityValues.add(current.naturalDynamicStability)
+                    internalWorldValues.add(current.internalWorldStability)
+                    chetnaValues.add(current.chetnaHypothesisIndex)
+
                     records.add(
                         ResearchCycle(
                             seed = seed,
@@ -183,7 +222,13 @@ object ResearchExperimentEngine {
                             network = current.networkStrength,
                             patternChange = current.patternChange,
                             phase = "TEST",
-                            memoryFidelity = fidelity
+                            memoryFidelity = fidelity,
+                            energy = current.energyReserve,
+                            matter = current.matterReserve,
+                            resourceSupport = current.resourceSupport,
+                            naturalStability = current.naturalDynamicStability,
+                            internalWorldStability = current.internalWorldStability,
+                            chetnaIndex = current.chetnaHypothesisIndex
                         )
                     )
                 }
@@ -202,7 +247,20 @@ object ResearchExperimentEngine {
                         memoryCurve = memoryCurve.toList(),
                         finalMemoryFidelity = fidelityCurve.lastOrNull() ?: 0f,
                         meanMemoryFidelity = fidelityCurve.average().toFloat(),
-                        memoryFidelityCurve = fidelityCurve.toList()
+                        memoryFidelityCurve = fidelityCurve.toList(),
+
+                        finalEnergy = current.energyReserve,
+                        finalMatter = current.matterReserve,
+                        finalResourceSupport = current.resourceSupport,
+                        finalNaturalStability = current.naturalDynamicStability,
+                        finalInternalWorldStability = current.internalWorldStability,
+                        finalChetnaIndex = current.chetnaHypothesisIndex,
+
+                        meanEnergy = energyValues.average().toFloat(),
+                        meanMatter = matterValues.average().toFloat(),
+                        meanNaturalStability = naturalStabilityValues.average().toFloat(),
+                        meanInternalWorldStability = internalWorldValues.average().toFloat(),
+                        meanChetnaIndex = chetnaValues.average().toFloat()
                     )
                 )
             }
@@ -215,12 +273,15 @@ object ResearchExperimentEngine {
         records: List<ResearchCycle>,
         results: List<ResearchResult>
     ): String {
+
         val out = StringBuilder()
 
         out.appendLine(
             "DATA_TYPE,PHASE,SEED,CONDITION_ID,CYCLE," +
                 "EXTERNAL,REFRESH,DECAY,STABILITY,MEMORY," +
-                "CONTINUITY,NETWORK,PATTERN_CHANGE,MEMORY_FIDELITY"
+                "CONTINUITY,NETWORK,PATTERN_CHANGE,MEMORY_FIDELITY," +
+                "ENERGY,MATTER,RESOURCE_SUPPORT,NATURAL_STABILITY," +
+                "INTERNAL_WORLD_STABILITY,CHETNA_INDEX"
         )
 
         records.forEach {
@@ -228,7 +289,10 @@ object ResearchExperimentEngine {
                 "CYCLE,${it.phase},${it.seed},${it.conditionId},${it.cycle}," +
                     "${it.external},${it.refresh},${it.decay}," +
                     "${it.stability},${it.memory},${it.continuity}," +
-                    "${it.network},${it.patternChange},${it.memoryFidelity}"
+                    "${it.network},${it.patternChange},${it.memoryFidelity}," +
+                    "${it.energy},${it.matter},${it.resourceSupport}," +
+                    "${it.naturalStability},${it.internalWorldStability}," +
+                    "${it.chetnaIndex}"
             )
         }
 
@@ -239,11 +303,17 @@ object ResearchExperimentEngine {
                 "FINAL_STABILITY,FINAL_MEMORY,FINAL_CONTINUITY," +
                 "FINAL_NETWORK,MEAN_STABILITY,MEAN_MEMORY," +
                 "TRAINING_END_MEMORY,MEMORY_RETENTION_RATIO," +
-                "FINAL_MEMORY_FIDELITY,MEAN_MEMORY_FIDELITY"
+                "FINAL_MEMORY_FIDELITY,MEAN_MEMORY_FIDELITY," +
+                "FINAL_ENERGY,FINAL_MATTER,FINAL_RESOURCE_SUPPORT," +
+                "FINAL_NATURAL_STABILITY,FINAL_INTERNAL_WORLD_STABILITY," +
+                "FINAL_CHETNA_INDEX,MEAN_ENERGY,MEAN_MATTER," +
+                "MEAN_NATURAL_STABILITY,MEAN_INTERNAL_WORLD_STABILITY," +
+                "MEAN_CHETNA_INDEX"
         )
 
         results.forEach {
             val safeName = it.condition.name.replace(",", ";")
+
             val ratio = if (it.trainingEndMemory > 0.000001f) {
                 it.finalMemory / it.trainingEndMemory
             } else {
@@ -256,7 +326,13 @@ object ResearchExperimentEngine {
                     "${it.finalContinuity},${it.finalNetwork}," +
                     "${it.meanStability},${it.meanMemory}," +
                     "${it.trainingEndMemory},${ratio ?: "N/A"}," +
-                    "${it.finalMemoryFidelity},${it.meanMemoryFidelity}"
+                    "${it.finalMemoryFidelity},${it.meanMemoryFidelity}," +
+                    "${it.finalEnergy},${it.finalMatter}," +
+                    "${it.finalResourceSupport},${it.finalNaturalStability}," +
+                    "${it.finalInternalWorldStability},${it.finalChetnaIndex}," +
+                    "${it.meanEnergy},${it.meanMatter}," +
+                    "${it.meanNaturalStability}," +
+                    "${it.meanInternalWorldStability},${it.meanChetnaIndex}"
             )
         }
 
