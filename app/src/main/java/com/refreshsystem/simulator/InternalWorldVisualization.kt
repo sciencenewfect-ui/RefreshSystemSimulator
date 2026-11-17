@@ -49,18 +49,20 @@ fun InternalWorldVisualization(
             val nodeRadius = size.minDimension * 0.055f
             val innerRadius = size.minDimension * 0.075f
 
-            // Four connected groups: each group contains four real model nodes.
             val points = List(count) { index ->
                 val cluster = index / 4
                 val positionInCluster = index % 4
+
                 val clusterAngle =
                     cluster * (2.0 * Math.PI / 4.0) - Math.PI / 2.0
+
                 val localAngle =
                     positionInCluster * (2.0 * Math.PI / 4.0) -
                         Math.PI / 2.0
 
                 val clusterX =
                     center.x + cos(clusterAngle).toFloat() * clusterRadius
+
                 val clusterY =
                     center.y + sin(clusterAngle).toFloat() * clusterRadius
 
@@ -70,12 +72,19 @@ fun InternalWorldVisualization(
                 )
             }
 
-            // Show the four groups without hiding their individual nodes.
+            // Chaar samooh dikhana
             for (cluster in 0 until (count + 3) / 4) {
-                val members = (cluster * 4 until minOf(cluster * 4 + 4, count))
-                if (members.isNotEmpty()) {
-                    val x = members.map { points[it].x }.average().toFloat()
-                    val y = members.map { points[it].y }.average().toFloat()
+                val members =
+                    (cluster * 4 until minOf(cluster * 4 + 4, count))
+
+                // FIX: Range khaali hai ya nahi, iski sahi jaanch
+                if (members.first <= members.last) {
+                    val x =
+                        members.map { points[it].x }.average().toFloat()
+
+                    val y =
+                        members.map { points[it].y }.average().toFloat()
+
                     drawCircle(
                         color = WorldPurple.copy(alpha = 0.07f),
                         radius = size.minDimension * 0.15f,
@@ -84,19 +93,26 @@ fun InternalWorldVisualization(
                 }
             }
 
-            // Draw the actual learned connections from the engine.
+            // Seekhe hue sambandh dikhana
             var maximumWeight = 0f
+
             for (i in 0 until minOf(count, weights.size)) {
                 for (j in 0 until minOf(count, weights[i].size)) {
-                    maximumWeight = maxOf(maximumWeight, abs(weights[i][j]))
+                    maximumWeight =
+                        maxOf(maximumWeight, abs(weights[i][j]))
                 }
             }
 
             for (i in 0 until minOf(count, weights.size)) {
                 for (j in i + 1 until minOf(count, weights[i].size)) {
                     val strength = abs(weights[i][j])
+
                     val relativeStrength =
-                        if (maximumWeight > 0f) strength / maximumWeight else 0f
+                        if (maximumWeight > 0f) {
+                            strength / maximumWeight
+                        } else {
+                            0f
+                        }
 
                     drawLine(
                         color = WorldGreen.copy(
@@ -111,7 +127,8 @@ fun InternalWorldVisualization(
                 }
             }
 
-            // Draw nodes. Cyan = current pattern; green glow = memory.
+            // Neela gola = vartaman pattern
+            // Hara glow = memory
             for (i in 0 until count) {
                 val p = abs(pattern[i]).coerceIn(0f, 1f)
                 val m = abs(memory[i]).coerceIn(0f, 1f)
@@ -136,12 +153,13 @@ fun InternalWorldVisualization(
                 )
             }
 
-            // Centre marker represents the complete connected world.
+            // Poore internal world ka centre
             drawCircle(
                 color = WorldPurple.copy(alpha = 0.20f),
                 radius = nodeRadius * 0.85f,
                 center = center
             )
+
             drawCircle(
                 color = WorldPurple,
                 radius = nodeRadius * 0.35f,
@@ -167,21 +185,25 @@ fun InternalWorldVisualization(
             "Andar ka badlav",
             color = Color.White
         )
+
         WorldBar(
             "Pattern mein badlav",
             (snapshot.patternChange / 0.25f).coerceIn(0f, 1f),
             WorldOrange
         )
+
         WorldBar(
             "Memory ki matra",
             snapshot.memoryRetention,
             WorldGreen
         )
+
         WorldBar(
             "Poore pattern ki nirantarata",
             snapshot.identityContinuity,
             WorldPurple
         )
+
         WorldBar(
             "Dynamic Stability",
             snapshot.dynamicStability,
@@ -192,6 +214,7 @@ fun InternalWorldVisualization(
             "Cycle: ${snapshot.cycle}  |  Refresh: ${snapshot.refreshCount}",
             color = WorldMuted
         )
+
         Text(
             "Lakeeron ki chamak sambandhon ki taakat batati hai. " +
                 "Golon ka badalta rang pattern aur memory ki sthiti dikhata hai.",
@@ -211,6 +234,7 @@ private fun WorldLegend(label: String, color: Color) {
                 .size(9.dp)
                 .background(color, RoundedCornerShape(50))
         )
+
         Text(label, color = WorldMuted)
     }
 }
@@ -231,6 +255,7 @@ private fun WorldBar(
             Text(label, color = WorldMuted)
             Text("${(safe * 100).toInt()}%", color = color)
         }
+
         LinearProgressIndicator(
             progress = safe,
             modifier = Modifier
