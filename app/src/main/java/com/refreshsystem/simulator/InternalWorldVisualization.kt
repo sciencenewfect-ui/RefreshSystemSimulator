@@ -17,7 +17,6 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
-import kotlin.math.sqrt
 
 private val WorldBg = Color(0xFF0D1729)
 private val WorldCyan = Color(0xFF52E5F2)
@@ -26,6 +25,13 @@ private val WorldPurple = Color(0xFFB69CFF)
 private val WorldOrange = Color(0xFFFFB86B)
 private val WorldMuted = Color(0xFF9EABC2)
 private val WorldLine = Color(0xFF52647D)
+
+private val GroupColors = listOf(
+    WorldPurple,
+    WorldCyan,
+    WorldGreen,
+    WorldOrange
+)
 
 @Composable
 fun InternalWorldVisualization(
@@ -39,27 +45,62 @@ fun InternalWorldVisualization(
     Column(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        Text(
+            "SYSTEM KA ANDARUNI NAKSHA",
+            color = WorldCyan
+        )
+
+        Text(
+            "Har samooh mein 4 ikaiyan hain. Ikaiyan aapas mein judkar " +
+                "ek bada Internal World banati hain.",
+            color = WorldMuted
+        )
+
         Canvas(
             Modifier
                 .fillMaxWidth()
-                .height(320.dp)
+                .height(350.dp)
                 .background(WorldBg, RoundedCornerShape(14.dp))
-                .padding(10.dp)
+                .padding(8.dp)
         ) {
             if (count == 0) return@Canvas
 
-            val center = Offset(size.width / 2f, size.height / 2f)
+            val center = Offset(
+                size.width / 2f,
+                size.height / 2f
+            )
+
             val minSide = size.minDimension
 
-            val groupRadius = minSide * 0.255f
-            val localRadius = minSide * 0.078f
-            val movementRange = minSide * 0.065f
-            val nodeRadius = minSide * 0.033f
+            val groupRadius = minSide * 0.275f
+            val localRadius = minSide * 0.095f
+            val nodeRadius = minSide * 0.043f
+            val movementRange = minSide * 0.055f
 
-            // Chaar samoohon ke kendr apni jagah par bane rahte hain.
-            // Unke andar ki ikaiyan pattern aur memory ke anusaar chalti hain.
+            // Values ko relative scale par dikhaya ja raha hai,
+            // taaki chhote badlav bhi dekhne layak hon.
+            var maximumValue = 0.05f
+
+            for (i in 0 until count) {
+                maximumValue = maxOf(
+                    maximumValue,
+                    abs(pattern[i]),
+                    abs(memory[i])
+                )
+            }
+
+            val normalizedPattern = List(count) {
+                (pattern[it] / maximumValue).coerceIn(-1f, 1f)
+            }
+
+            val normalizedMemory = List(count) {
+                (memory[it] / maximumValue).coerceIn(-1f, 1f)
+            }
+
+            // Chaar samoohon ke kendr.
             val groupCenters = List(4) { group ->
-                val angle = group * (Math.PI / 2.0) - Math.PI / 2.0
+                val angle =
+                    group * (Math.PI / 2.0) - Math.PI / 2.0
 
                 Offset(
                     center.x + cos(angle).toFloat() * groupRadius,
@@ -67,7 +108,8 @@ fun InternalWorldVisualization(
                 )
             }
 
-            // Har node ki position current pattern aur memory se nikalti hai.
+            // Har samooh mein chaar ikaiyan.
+            // Position pattern aur memory ke badlav se nikalti hai.
             val points = List(count) { index ->
                 val group = index / 4
                 val member = index % 4
@@ -78,202 +120,245 @@ fun InternalWorldVisualization(
                 val memberAngle =
                     member * (Math.PI / 2.0) - Math.PI / 2.0
 
-                val p = pattern[index].coerceIn(-1f, 1f)
-                val m = memory[index].coerceIn(-1f, 1f)
+                val p = normalizedPattern[index]
+                val m = normalizedMemory[index]
 
-                val first = group * 4
-                val last = minOf(first + 4, count)
-
-                var groupPattern = 0f
-                var groupMemory = 0f
-
-                for (i in first until last) {
-                    groupPattern += pattern[i]
-                    groupMemory += memory[i]
-                }
-
-                val members = (last - first).coerceAtLeast(1)
-                groupPattern /= members
-                groupMemory /= members
-
-                // Poore samooh ka halka movement.
-                val groupShift =
-                    (groupPattern * 0.55f + groupMemory * 0.30f) *
-                        movementRange * 0.45f
-
-                val groupSideShift =
-                    (groupPattern - groupMemory) *
-                        movementRange * 0.25f
-
-                val gx = groupCenters[group].x +
-                    cos(groupAngle).toFloat() * groupShift -
-                    sin(groupAngle).toFloat() * groupSideShift
-
-                val gy = groupCenters[group].y +
-                    sin(groupAngle).toFloat() * groupShift +
-                    cos(groupAngle).toFloat() * groupSideShift
-
-                // Ikai ki apni position mein badlav.
                 val radialChange =
-                    (p * 0.55f + m * 0.35f) * movementRange
+                    (p * 0.65f + m * 0.35f) * movementRange
 
                 val sideChange =
-                    (p - m) * 0.30f * movementRange
+                    (p - m) * movementRange * 0.35f
 
                 val radius = localRadius + radialChange
 
-                val baseX = cos(memberAngle).toFloat() * radius
-                val baseY = sin(memberAngle).toFloat() * radius
-
-                val shiftX =
-                    cos(memberAngle).toFloat() * sideChange
-
-                val shiftY =
-                    sin(memberAngle).toFloat() * sideChange
+                val gx = groupCenters[group].x
+                val gy = groupCenters[group].y
 
                 Offset(
-                    gx + baseX - shiftY,
-                    gy + baseY + shiftX
+                    gx +
+                        cos(memberAngle).toFloat() * radius -
+                        sin(memberAngle).toFloat() * sideChange,
+
+                    gy +
+                        sin(memberAngle).toFloat() * radius +
+                        cos(memberAngle).toFloat() * sideChange
                 )
             }
 
-            // Samoohon ka kshetra unki current activity ke saath badalta hai.
+            // Pehle chaar alag samooh dikhaye jaate hain.
             for (group in 0 until 4) {
                 val first = group * 4
                 val last = minOf(first + 4, count)
 
                 if (first < last) {
-                    var averageActivity = 0f
-
-                    for (i in first until last) {
-                        averageActivity +=
-                            abs(pattern[i]) + abs(memory[i])
-                    }
-
-                    averageActivity /= ((last - first) * 2f)
-
                     val members = (first until last).toList()
+
                     val gx = members.map { points[it].x }
                         .average().toFloat()
+
                     val gy = members.map { points[it].y }
                         .average().toFloat()
 
                     drawCircle(
-                        color = WorldPurple.copy(
-                            alpha = 0.06f + averageActivity * 0.10f
-                        ),
-                        radius = minSide * (
-                            0.115f + averageActivity * 0.045f
-                        ),
+                        color = GroupColors[group].copy(alpha = 0.10f),
+                        radius = minSide * 0.145f,
                         center = Offset(gx, gy)
                     )
-                }
-            }
 
-            // Seekhe hue sambandhon ki maximum strength.
-            var maximumWeight = 0f
-
-            for (i in 0 until minOf(count, weights.size)) {
-                for (j in 0 until minOf(count, weights[i].size)) {
-                    maximumWeight = maxOf(
-                        maximumWeight,
-                        abs(weights[i][j])
+                    drawCircle(
+                        color = GroupColors[group].copy(alpha = 0.24f),
+                        radius = minSide * 0.115f,
+                        center = Offset(gx, gy),
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(
+                            width = 1.5.dp.toPx()
+                        )
                     )
                 }
             }
 
-            // Connections: strength badalne par lakeeron ki motai
-            // aur visibility bhi badalti hai.
-            for (i in 0 until count) {
-                for (j in i + 1 until count) {
+            // Har group ke andar chaar nodes ko ring mein jodna.
+            // Isse internal structure saaf dikhega.
+            for (group in 0 until 4) {
+                val first = group * 4
+                val last = minOf(first + 4, count)
+
+                if (last - first < 2) continue
+
+                for (member in 0 until (last - first)) {
+                    val a = first + member
+                    val b = first + (member + 1) % (last - first)
+
                     if (
-                        i >= weights.size ||
-                        j >= weights[i].size
-                    ) continue
+                        a < weights.size &&
+                        b < weights[a].size
+                    ) {
+                        val strength = abs(weights[a][b])
 
-                    val strength = abs(weights[i][j])
+                        val relative =
+                            (strength / 0.02f).coerceIn(0f, 1f)
 
-                    if (strength < 0.0005f) continue
-
-                    val relativeStrength =
-                        if (maximumWeight > 0f) {
-                            (strength / maximumWeight).coerceIn(0f, 1f)
-                        } else {
-                            0f
-                        }
-
-                    val sameGroup = i / 4 == j / 4
-
-                    val lineColor =
-                        if (sameGroup) WorldGreen else WorldCyan
-
-                    val alpha =
-                        if (sameGroup) {
-                            0.12f + relativeStrength * 0.70f
-                        } else {
-                            0.06f + relativeStrength * 0.55f
-                        }
-
-                    drawLine(
-                        color = lineColor.copy(alpha = alpha),
-                        start = points[i],
-                        end = points[j],
-                        strokeWidth =
-                            0.5.dp.toPx() +
-                                relativeStrength * 2.4.dp.toPx(),
-                        cap = StrokeCap.Round
-                    )
+                        drawLine(
+                            color = GroupColors[group].copy(
+                                alpha = 0.35f + relative * 0.55f
+                            ),
+                            start = points[a],
+                            end = points[b],
+                            strokeWidth =
+                                1.5.dp.toPx() + relative * 2.dp.toPx(),
+                            cap = StrokeCap.Round
+                        )
+                    } else {
+                        drawLine(
+                            color = GroupColors[group].copy(alpha = 0.35f),
+                            start = points[a],
+                            end = points[b],
+                            strokeWidth = 1.5.dp.toPx(),
+                            cap = StrokeCap.Round
+                        )
+                    }
                 }
             }
 
-            // Nodes: current pattern aur memory dono position
-            // aur node ke size ko prabhavit karte hain.
+            // Group ke andar ke extra sambandh tabhi dikhte hain
+            // jab unki strength paryapt ho.
+            for (group in 0 until 4) {
+                val first = group * 4
+                val last = minOf(first + 4, count)
+
+                for (i in first until last) {
+                    for (j in i + 1 until last) {
+                        val adjacent =
+                            (j - i == 1) ||
+                                (i == first && j == last - 1)
+
+                        if (adjacent) continue
+                        if (i >= weights.size || j >= weights[i].size) continue
+
+                        val strength = abs(weights[i][j])
+
+                        if (strength < 0.004f) continue
+
+                        val relative =
+                            (strength / 0.02f).coerceIn(0f, 1f)
+
+                        if (relative < 0.35f) continue
+
+                        drawLine(
+                            color = GroupColors[group].copy(
+                                alpha = 0.12f + relative * 0.35f
+                            ),
+                            start = points[i],
+                            end = points[j],
+                            strokeWidth = 1.dp.toPx(),
+                            cap = StrokeCap.Round
+                        )
+                    }
+                }
+            }
+
+            // Chaar samoohon ke beech har pair ka sabse mazboot
+            // actual learned connection dikhana.
+            for (groupA in 0 until 4) {
+                for (groupB in groupA + 1 until 4) {
+                    var bestStrength = 0f
+                    var bestA = -1
+                    var bestB = -1
+
+                    val startA = groupA * 4
+                    val endA = minOf(startA + 4, count)
+                    val startB = groupB * 4
+                    val endB = minOf(startB + 4, count)
+
+                    for (i in startA until endA) {
+                        for (j in startB until endB) {
+                            if (
+                                i < weights.size &&
+                                j < weights[i].size
+                            ) {
+                                val strength = abs(weights[i][j])
+
+                                if (strength > bestStrength) {
+                                    bestStrength = strength
+                                    bestA = i
+                                    bestB = j
+                                }
+                            }
+                        }
+                    }
+
+                    if (bestA >= 0 && bestB >= 0) {
+                        val relative =
+                            (bestStrength / 0.02f).coerceIn(0f, 1f)
+
+                        drawLine(
+                            color = WorldCyan.copy(
+                                alpha = 0.18f + relative * 0.65f
+                            ),
+                            start = points[bestA],
+                            end = points[bestB],
+                            strokeWidth =
+                                1.dp.toPx() + relative * 2.dp.toPx(),
+                            cap = StrokeCap.Round
+                        )
+                    }
+                }
+            }
+
+            // Har group ka central connection.
+            for (group in 0 until 4) {
+                drawLine(
+                    color = GroupColors[group].copy(alpha = 0.40f),
+                    start = center,
+                    end = groupCenters[group],
+                    strokeWidth = 1.5.dp.toPx(),
+                    cap = StrokeCap.Round
+                )
+            }
+
+            // Nodes: rang group ko, cyan pattern ko aur green glow
+            // memory ki relative matra ko dikhata hai.
             for (i in 0 until count) {
-                val p = abs(pattern[i]).coerceIn(0f, 1f)
-                val m = abs(memory[i]).coerceIn(0f, 1f)
+                val p = abs(normalizedPattern[i])
+                val m = abs(normalizedMemory[i])
                 val point = points[i]
+                val groupColor = GroupColors[i / 4]
 
                 drawCircle(
-                    color = WorldGreen.copy(alpha = 0.10f + m * 0.42f),
-                    radius = nodeRadius * (1.5f + m),
+                    color = WorldGreen.copy(alpha = 0.12f + m * 0.38f),
+                    radius = nodeRadius * (1.6f + m * 0.5f),
                     center = point
                 )
 
                 drawCircle(
-                    color = WorldCyan.copy(alpha = 0.30f + p * 0.70f),
-                    radius = nodeRadius * (0.65f + p * 0.55f),
+                    color = groupColor.copy(alpha = 0.35f + p * 0.65f),
+                    radius = nodeRadius * (0.75f + p * 0.35f),
                     center = point
                 )
 
                 drawCircle(
-                    color = Color.White.copy(alpha = 0.85f),
-                    radius = 2.dp.toPx(),
+                    color = Color.White,
+                    radius = 2.5.dp.toPx(),
                     center = point
                 )
             }
 
-            // Kendr: poore Internal World ka common connection.
+            // Central shared point.
             drawCircle(
-                color = WorldPurple.copy(alpha = 0.20f),
-                radius = nodeRadius * 2f,
+                color = WorldPurple.copy(alpha = 0.18f),
+                radius = nodeRadius * 2.1f,
                 center = center
             )
 
             drawCircle(
                 color = WorldPurple,
-                radius = nodeRadius * 0.65f,
+                radius = nodeRadius * 0.8f,
                 center = center
             )
         }
 
         Text(
-            "INTERNAL WORLD: 16 IKAIYAN, 4 SAMOOH",
+            "4 SAMOOH AUR UNKE AAPASI SAMBANDH",
             color = WorldCyan
-        )
-
-        Text(
-            "Chaar samooh alag hain, lekin unke sambandh poore system ko jodte hain.",
-            color = WorldMuted
         )
 
         Row(
@@ -292,12 +377,15 @@ fun InternalWorldVisualization(
             WorldLegend("Samooh 4", WorldOrange)
         }
 
-        Text("RANGON AUR LAKEERON KA ARTH", color = Color.White)
+        Text(
+            "PATTERN AUR MEMORY",
+            color = Color.White
+        )
 
-        WorldLegend("Neela: vartaman pattern", WorldCyan)
-        WorldLegend("Hara: memory ki matra", WorldGreen)
-        WorldLegend("Baingani: samooh aur kendr", WorldPurple)
-        WorldLegend("Lakeerein: seekhe hue sambandh", WorldLine)
+        WorldLegend("Node ka rang: samooh aur pattern", WorldCyan)
+        WorldLegend("Hara glow: memory ki matra", WorldGreen)
+        WorldLegend("Lakeerein: learned connections", WorldLine)
+        WorldLegend("Beech ka bindu: shared system", WorldPurple)
 
         Text(
             "SYSTEM MEIN KYA BADAL RAHA HAI?",
@@ -329,16 +417,30 @@ fun InternalWorldVisualization(
         )
 
         WorldBar(
-            "Sambandhon ki taakat",
+            "Network ki taakat",
             snapshot.networkStrength,
             WorldGreen
         )
 
-        Text("ABHI SYSTEM KI STHITI", color = Color.White)
+        Text(
+            "SYSTEM KI VARTAMAN STHITI",
+            color = Color.White
+        )
 
-        WorldStatus("External Information", snapshot.externalInputActive)
-        WorldStatus("Internal Refresh", snapshot.internalRefreshActive)
-        WorldStatus("Natural Decay", snapshot.naturalDecayActive)
+        WorldStatus(
+            "External Information",
+            snapshot.externalInputActive
+        )
+
+        WorldStatus(
+            "Internal Refresh",
+            snapshot.internalRefreshActive
+        )
+
+        WorldStatus(
+            "Natural Decay",
+            snapshot.naturalDecayActive
+        )
 
         Text(
             "Cycle: ${snapshot.cycle}  |  Refresh: ${snapshot.refreshCount}",
@@ -346,10 +448,10 @@ fun InternalWorldVisualization(
         )
 
         Text(
-            "Ikaiyon ki position current pattern aur memory ke anusaar " +
-                "badalti hai. Lakeerein engine ke seekhe hue sambandhon " +
-                "ko dikhati hain. Chaar samoohon ka overall arrangement " +
-                "bana rehta hai.",
+            "Position mein badlav pattern aur memory ke relative values " +
+                "se aata hai. Group ke andar ring connections aur groups " +
+                "ke beech sabse mazboot learned connection dikhaya gaya hai. " +
+                "Relative visual scaling ka matlab actual physical distance nahi hai.",
             color = WorldMuted
         )
     }
@@ -369,7 +471,11 @@ private fun WorldLegend(
                 .size(10.dp)
                 .background(color, RoundedCornerShape(50))
         )
-        Text(label, color = WorldMuted)
+
+        Text(
+            label,
+            color = WorldMuted
+        )
     }
 }
 
@@ -414,6 +520,7 @@ private fun WorldStatus(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(label, color = WorldMuted)
+
         Text(
             if (active) "CHALU" else "BAND",
             color = if (active) WorldGreen else WorldOrange
