@@ -1,4 +1,3 @@
-
 package com.refreshsystem.simulator
 
 import android.net.Uri
@@ -146,12 +145,9 @@ fun OpenSystemSimulationLabScreen() {
         )
 
         PanelCard("INTERNAL WORLD NETWORK") {
-            NetworkDiagram(snapshot.internalPattern, snapshot.memoryState)
-
-            Text(
-                "Node intensity = internal pattern; outer glow = memory magnitude.",
-                color = Muted,
-                style = MaterialTheme.typography.bodySmall
+            InternalWorldVisualization(
+                snapshot = snapshot,
+                weights = engine.currentWeights()
             )
         }
 
@@ -338,10 +334,7 @@ fun OpenSystemSimulationLabScreen() {
 
                 ConditionComparisonChart(results)
 
-                // Factor-wise paired comparison analysis
                 FactorAnalysisPanel(results)
-
-                // Memory information fidelity analysis
                 MemoryFidelityAnalysis(results)
 
                 Row(
@@ -686,67 +679,5 @@ private fun ValueLine(label: String, value: String) {
     ) {
         Text(label, color = Muted)
         Text(value, color = Color.White)
-    }
-}
-
-@Composable
-private fun NetworkDiagram(
-    pattern: List<Float>,
-    memory: List<Float>
-) {
-    Canvas(
-        Modifier
-            .fillMaxWidth()
-            .height(230.dp)
-            .background(Color(0xFF0D1729), RoundedCornerShape(12.dp))
-    ) {
-        val count = minOf(pattern.size, memory.size)
-        if (count == 0) return@Canvas
-
-        val center = Offset(size.width / 2f, size.height / 2f)
-        val radius = size.minDimension * 0.36f
-
-        val points = List(count) { i ->
-            val angle = 2.0 * Math.PI * i / count - Math.PI / 2.0
-            Offset(
-                center.x + cos(angle).toFloat() * radius,
-                center.y + sin(angle).toFloat() * radius
-            )
-        }
-
-        for (i in 0 until count) {
-            drawLine(
-                Color(0xFF526A8A),
-                points[i],
-                points[(i + 1) % count],
-                strokeWidth = 2.dp.toPx()
-            )
-
-            drawLine(
-                Color(0xFF34465F),
-                points[i],
-                points[(i + 2) % count],
-                strokeWidth = 1.dp.toPx()
-            )
-        }
-
-        for (i in 0 until count) {
-            val p = pattern[i].coerceIn(-1f, 1f)
-            val m = abs(memory[i]).coerceIn(0f, 1f)
-
-            drawCircle(
-                Green.copy(alpha = 0.18f + m * 0.55f),
-                radius = 9.dp.toPx() + m * 9.dp.toPx(),
-                center = points[i]
-            )
-
-            drawCircle(
-                Cyan.copy(alpha = 0.35f + abs(p) * 0.65f),
-                radius = 4.dp.toPx() + abs(p) * 5.dp.toPx(),
-                center = points[i]
-            )
-        }
-
-        drawCircle(Cyan, 5.dp.toPx(), center)
     }
 }
