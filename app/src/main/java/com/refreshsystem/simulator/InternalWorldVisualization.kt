@@ -1,36 +1,40 @@
 
 package com.refreshsystem.simulator
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
-import kotlin.math.cos
-import kotlin.math.sin
 
 private val WorldBg = Color(0xFF0D1729)
+private val WorldPanel = Color(0xFF18263D)
 private val WorldCyan = Color(0xFF52E5F2)
 private val WorldGreen = Color(0xFF62E6A5)
 private val WorldPurple = Color(0xFFB69CFF)
 private val WorldOrange = Color(0xFFFFB86B)
 private val WorldMuted = Color(0xFF9EABC2)
-private val WorldLine = Color(0xFF52647D)
+private val WorldLine = Color(0xFF34445D)
 
 private val GroupColors = listOf(
     WorldPurple,
     WorldCyan,
     WorldGreen,
     WorldOrange
+)
+
+private data class WorldConnection(
+    val first: Int,
+    val second: Int,
+    val strength: Float
 )
 
 @Composable
@@ -42,488 +46,340 @@ fun InternalWorldVisualization(
     val memory = snapshot.memoryState
     val count = minOf(pattern.size, memory.size, 16)
 
+    val connections = buildList {
+        for (i in 0 until minOf(count, weights.size)) {
+            for (j in i + 1 until minOf(count, weights[i].size)) {
+                add(
+                    WorldConnection(
+                        first = i,
+                        second = j,
+                        strength = weights[i][j]
+                    )
+                )
+            }
+        }
+    }.sortedByDescending { abs(it.strength) }.take(8)
+
     Column(
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Text(
-            "SYSTEM KA ANDARUNI NAKSHA",
+            "INTERNAL WORLD: ANDAR KYA HO RAHA HAI?",
             color = WorldCyan
         )
 
         Text(
-            "Har samooh mein 4 ikaiyan hain. Ikaiyan aapas mein judkar " +
-                "ek bada Internal World banati hain.",
+            "Yahan 16 fixed ikaiyan hain. Har ikai ka Pattern " +
+                "aur Memory badal sakta hai. Unke beech sambandh " +
+                "seekhne ke saath mazboot ya kamzor hote hain.",
             color = WorldMuted
         )
 
-        Canvas(
-            Modifier
-                .fillMaxWidth()
-                .height(350.dp)
-                .background(WorldBg, RoundedCornerShape(14.dp))
-                .padding(8.dp)
-        ) {
-            if (count == 0) return@Canvas
+        // Vartaman system ki sthiti
+        SectionTitle("1. SYSTEM KI VARTAMAN STITHI")
 
-            val center = Offset(
-                size.width / 2f,
-                size.height / 2f
-            )
+        ValueRow("Cycle", snapshot.cycle.toString())
+        ValueRow("External Information", percent(snapshot.informationLevel))
+        ValueRow("Internal Refresh", if (snapshot.internalRefreshActive) "CHALU" else "BAND")
+        ValueRow("Natural Decay", if (snapshot.naturalDecayActive) "CHALU" else "BAND")
+        ValueRow("Refresh Count", snapshot.refreshCount.toString())
 
-            val minSide = size.minDimension
-
-            val groupRadius = minSide * 0.275f
-            val localRadius = minSide * 0.095f
-            val nodeRadius = minSide * 0.043f
-            val movementRange = minSide * 0.055f
-
-            // Values ko relative scale par dikhaya ja raha hai,
-            // taaki chhote badlav bhi dekhne layak hon.
-            var maximumValue = 0.05f
-
-            for (i in 0 until count) {
-                maximumValue = maxOf(
-                    maximumValue,
-                    abs(pattern[i]),
-                    abs(memory[i])
-                )
-            }
-
-            val normalizedPattern = List(count) {
-                (pattern[it] / maximumValue).coerceIn(-1f, 1f)
-            }
-
-            val normalizedMemory = List(count) {
-                (memory[it] / maximumValue).coerceIn(-1f, 1f)
-            }
-
-            // Chaar samoohon ke kendr.
-            val groupCenters = List(4) { group ->
-                val angle =
-                    group * (Math.PI / 2.0) - Math.PI / 2.0
-
-                Offset(
-                    center.x + cos(angle).toFloat() * groupRadius,
-                    center.y + sin(angle).toFloat() * groupRadius
-                )
-            }
-
-            // Har samooh mein chaar ikaiyan.
-            // Position pattern aur memory ke badlav se nikalti hai.
-            val points = List(count) { index ->
-                val group = index / 4
-                val member = index % 4
-
-                val groupAngle =
-                    group * (Math.PI / 2.0) - Math.PI / 2.0
-
-                val memberAngle =
-                    member * (Math.PI / 2.0) - Math.PI / 2.0
-
-                val p = normalizedPattern[index]
-                val m = normalizedMemory[index]
-
-                val radialChange =
-                    (p * 0.65f + m * 0.35f) * movementRange
-
-                val sideChange =
-                    (p - m) * movementRange * 0.35f
-
-                val radius = localRadius + radialChange
-
-                val gx = groupCenters[group].x
-                val gy = groupCenters[group].y
-
-                Offset(
-                    gx +
-                        cos(memberAngle).toFloat() * radius -
-                        sin(memberAngle).toFloat() * sideChange,
-
-                    gy +
-                        sin(memberAngle).toFloat() * radius +
-                        cos(memberAngle).toFloat() * sideChange
-                )
-            }
-
-            // Pehle chaar alag samooh dikhaye jaate hain.
-            for (group in 0 until 4) {
-                val first = group * 4
-                val last = minOf(first + 4, count)
-
-                if (first < last) {
-                    val members = (first until last).toList()
-
-                    val gx = members.map { points[it].x }
-                        .average().toFloat()
-
-                    val gy = members.map { points[it].y }
-                        .average().toFloat()
-
-                    drawCircle(
-                        color = GroupColors[group].copy(alpha = 0.10f),
-                        radius = minSide * 0.145f,
-                        center = Offset(gx, gy)
-                    )
-
-                    drawCircle(
-                        color = GroupColors[group].copy(alpha = 0.24f),
-                        radius = minSide * 0.115f,
-                        center = Offset(gx, gy),
-                        style = androidx.compose.ui.graphics.drawscope.Stroke(
-                            width = 1.5.dp.toPx()
-                        )
-                    )
-                }
-            }
-
-            // Har group ke andar chaar nodes ko ring mein jodna.
-            // Isse internal structure saaf dikhega.
-            for (group in 0 until 4) {
-                val first = group * 4
-                val last = minOf(first + 4, count)
-
-                if (last - first < 2) continue
-
-                for (member in 0 until (last - first)) {
-                    val a = first + member
-                    val b = first + (member + 1) % (last - first)
-
-                    if (
-                        a < weights.size &&
-                        b < weights[a].size
-                    ) {
-                        val strength = abs(weights[a][b])
-
-                        val relative =
-                            (strength / 0.02f).coerceIn(0f, 1f)
-
-                        drawLine(
-                            color = GroupColors[group].copy(
-                                alpha = 0.35f + relative * 0.55f
-                            ),
-                            start = points[a],
-                            end = points[b],
-                            strokeWidth =
-                                1.5.dp.toPx() + relative * 2.dp.toPx(),
-                            cap = StrokeCap.Round
-                        )
-                    } else {
-                        drawLine(
-                            color = GroupColors[group].copy(alpha = 0.35f),
-                            start = points[a],
-                            end = points[b],
-                            strokeWidth = 1.5.dp.toPx(),
-                            cap = StrokeCap.Round
-                        )
-                    }
-                }
-            }
-
-            // Group ke andar ke extra sambandh tabhi dikhte hain
-            // jab unki strength paryapt ho.
-            for (group in 0 until 4) {
-                val first = group * 4
-                val last = minOf(first + 4, count)
-
-                for (i in first until last) {
-                    for (j in i + 1 until last) {
-                        val adjacent =
-                            (j - i == 1) ||
-                                (i == first && j == last - 1)
-
-                        if (adjacent) continue
-                        if (i >= weights.size || j >= weights[i].size) continue
-
-                        val strength = abs(weights[i][j])
-
-                        if (strength < 0.004f) continue
-
-                        val relative =
-                            (strength / 0.02f).coerceIn(0f, 1f)
-
-                        if (relative < 0.35f) continue
-
-                        drawLine(
-                            color = GroupColors[group].copy(
-                                alpha = 0.12f + relative * 0.35f
-                            ),
-                            start = points[i],
-                            end = points[j],
-                            strokeWidth = 1.dp.toPx(),
-                            cap = StrokeCap.Round
-                        )
-                    }
-                }
-            }
-
-            // Chaar samoohon ke beech har pair ka sabse mazboot
-            // actual learned connection dikhana.
-            for (groupA in 0 until 4) {
-                for (groupB in groupA + 1 until 4) {
-                    var bestStrength = 0f
-                    var bestA = -1
-                    var bestB = -1
-
-                    val startA = groupA * 4
-                    val endA = minOf(startA + 4, count)
-                    val startB = groupB * 4
-                    val endB = minOf(startB + 4, count)
-
-                    for (i in startA until endA) {
-                        for (j in startB until endB) {
-                            if (
-                                i < weights.size &&
-                                j < weights[i].size
-                            ) {
-                                val strength = abs(weights[i][j])
-
-                                if (strength > bestStrength) {
-                                    bestStrength = strength
-                                    bestA = i
-                                    bestB = j
-                                }
-                            }
-                        }
-                    }
-
-                    if (bestA >= 0 && bestB >= 0) {
-                        val relative =
-                            (bestStrength / 0.02f).coerceIn(0f, 1f)
-
-                        drawLine(
-                            color = WorldCyan.copy(
-                                alpha = 0.18f + relative * 0.65f
-                            ),
-                            start = points[bestA],
-                            end = points[bestB],
-                            strokeWidth =
-                                1.dp.toPx() + relative * 2.dp.toPx(),
-                            cap = StrokeCap.Round
-                        )
-                    }
-                }
-            }
-
-            // Har group ka central connection.
-            for (group in 0 until 4) {
-                drawLine(
-                    color = GroupColors[group].copy(alpha = 0.40f),
-                    start = center,
-                    end = groupCenters[group],
-                    strokeWidth = 1.5.dp.toPx(),
-                    cap = StrokeCap.Round
-                )
-            }
-
-            // Nodes: rang group ko, cyan pattern ko aur green glow
-            // memory ki relative matra ko dikhata hai.
-            for (i in 0 until count) {
-                val p = abs(normalizedPattern[i])
-                val m = abs(normalizedMemory[i])
-                val point = points[i]
-                val groupColor = GroupColors[i / 4]
-
-                drawCircle(
-                    color = WorldGreen.copy(alpha = 0.12f + m * 0.38f),
-                    radius = nodeRadius * (1.6f + m * 0.5f),
-                    center = point
-                )
-
-                drawCircle(
-                    color = groupColor.copy(alpha = 0.35f + p * 0.65f),
-                    radius = nodeRadius * (0.75f + p * 0.35f),
-                    center = point
-                )
-
-                drawCircle(
-                    color = Color.White,
-                    radius = 2.5.dp.toPx(),
-                    center = point
-                )
-            }
-
-            // Central shared point.
-            drawCircle(
-                color = WorldPurple.copy(alpha = 0.18f),
-                radius = nodeRadius * 2.1f,
-                center = center
-            )
-
-            drawCircle(
-                color = WorldPurple,
-                radius = nodeRadius * 0.8f,
-                center = center
-            )
-        }
+        // Chaar samooh aur unki 16 ikaiyan
+        SectionTitle("2. ANDAR KI 16 IKAIYAN")
 
         Text(
-            "4 SAMOOH AUR UNKE AAPASI SAMBANDH",
-            color = WorldCyan
+            "Har box ek ikai hai. Neeli bar Pattern aur hari bar Memory " +
+                "ki matra dikhati hai. Sankhya actual model value hai.",
+            color = WorldMuted
         )
 
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            WorldLegend("Samooh 1", WorldPurple)
-            WorldLegend("Samooh 2", WorldCyan)
+        for (group in 0 until 4) {
+            val first = group * 4
+            val last = minOf(first + 4, count)
+
+            if (first < last) {
+                GroupCard(
+                    group = group,
+                    pattern = pattern,
+                    memory = memory,
+                    first = first,
+                    last = last
+                )
+            }
         }
 
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            WorldLegend("Samooh 3", WorldGreen)
-            WorldLegend("Samooh 4", WorldOrange)
+        // Actual learned connections
+        SectionTitle("3. IKAIYAN AAPAS MEIN KAISE JUDI HAIN?")
+
+        Text(
+            "Neeche model ke sabse mazboot 8 learned connections hain. " +
+                "Positive value ka matlab positive weight aur negative " +
+                "value ka matlab negative weight hai.",
+            color = WorldMuted
+        )
+
+        if (connections.isEmpty() || connections.all { abs(it.strength) < 0.000001f }) {
+            Text(
+                "Abhi koi meaningful learned connection nahi bana hai. " +
+                    "Simulation chalne par weights update honge.",
+                color = WorldOrange
+            )
+        } else {
+            connections.forEach { connection ->
+                ConnectionRow(connection)
+            }
         }
 
-        Text(
-            "PATTERN AUR MEMORY",
-            color = Color.White
-        )
+        // System measurements
+        SectionTitle("4. SYSTEM MEIN KITNA BADLAV HO RAHA HAI?")
 
-        WorldLegend("Node ka rang: samooh aur pattern", WorldCyan)
-        WorldLegend("Hara glow: memory ki matra", WorldGreen)
-        WorldLegend("Lakeerein: learned connections", WorldLine)
-        WorldLegend("Beech ka bindu: shared system", WorldPurple)
-
-        Text(
-            "SYSTEM MEIN KYA BADAL RAHA HAI?",
-            color = WorldCyan
-        )
-
-        WorldBar(
+        Measurement(
             "Pattern mein badlav",
-            (snapshot.patternChange / 0.25f).coerceIn(0f, 1f),
-            WorldOrange
+            snapshot.patternChange,
+            WorldOrange,
+            "%.4f".format(snapshot.patternChange)
         )
 
-        WorldBar(
+        Measurement(
             "Memory ki matra",
             snapshot.memoryRetention,
-            WorldGreen
+            WorldGreen,
+            percent(snapshot.memoryRetention)
         )
 
-        WorldBar(
+        Measurement(
             "Pattern ki nirantarata",
             snapshot.identityContinuity,
-            WorldPurple
+            WorldPurple,
+            percent(snapshot.identityContinuity)
         )
 
-        WorldBar(
+        Measurement(
             "Dynamic Stability",
             snapshot.dynamicStability,
-            WorldCyan
+            WorldCyan,
+            percent(snapshot.dynamicStability)
         )
 
-        WorldBar(
+        Measurement(
             "Network ki taakat",
             snapshot.networkStrength,
-            WorldGreen
+            WorldGreen,
+            percent(snapshot.networkStrength)
+        )
+
+        SectionTitle("5. IN NUMBERS KA MATLAB")
+
+        MeaningRow(
+            "Pattern",
+            "Is samay ikai ke andar ka active pattern."
+        )
+        MeaningRow(
+            "Memory",
+            "Pichhle updates se bachi hui memory value."
+        )
+        MeaningRow(
+            "Connection",
+            "Do ikaiyon ke beech learned weight."
+        )
+        MeaningRow(
+            "Refresh",
+            "Pattern aur memory ko update karne ki prakriya."
+        )
+        MeaningRow(
+            "Decay",
+            "Pattern aur memory ki value ko dheere-dheere kam karna."
         )
 
         Text(
-            "SYSTEM KI VARTAMAN STHITI",
-            color = Color.White
-        )
-
-        WorldStatus(
-            "External Information",
-            snapshot.externalInputActive
-        )
-
-        WorldStatus(
-            "Internal Refresh",
-            snapshot.internalRefreshActive
-        )
-
-        WorldStatus(
-            "Natural Decay",
-            snapshot.naturalDecayActive
-        )
-
-        Text(
-            "Cycle: ${snapshot.cycle}  |  Refresh: ${snapshot.refreshCount}",
-            color = WorldMuted
-        )
-
-        Text(
-            "Position mein badlav pattern aur memory ke relative values " +
-                "se aata hai. Group ke andar ring connections aur groups " +
-                "ke beech sabse mazboot learned connection dikhaya gaya hai. " +
-                "Relative visual scaling ka matlab actual physical distance nahi hai.",
+            "Dhyan dein: 16 ikaiyan abhi fixed hain. Is model mein " +
+                "naye nodes ka banna ya purane nodes ka mitna implement " +
+                "nahi hai. Connection weight bhi model ki mathematical " +
+                "value hai, kisi physical distance ka maap nahi.",
             color = WorldMuted
         )
     }
 }
 
 @Composable
-private fun WorldLegend(
-    label: String,
+private fun GroupCard(
+    group: Int,
+    pattern: List<Float>,
+    memory: List<Float>,
+    first: Int,
+    last: Int
+) {
+    val groupColor = GroupColors[group]
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = WorldPanel
+        ),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                "SAMOOH ${group + 1}",
+                color = groupColor
+            )
+
+            for (index in first until last) {
+                NodeCard(
+                    index = index,
+                    pattern = pattern[index],
+                    memory = memory[index],
+                    color = groupColor
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NodeCard(
+    index: Int,
+    pattern: Float,
+    memory: Float,
     color: Color
 ) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                WorldBg,
+                RoundedCornerShape(9.dp)
+            )
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp)
     ) {
-        Box(
-            Modifier
-                .size(10.dp)
-                .background(color, RoundedCornerShape(50))
+        Text(
+            "IKAI ${index + 1}",
+            color = color
         )
 
-        Text(
-            label,
-            color = WorldMuted
+        ValueRow(
+            "Pattern value",
+            "%.4f".format(pattern)
+        )
+
+        LinearProgressIndicator(
+            progress = abs(pattern).coerceIn(0f, 1f),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(6.dp),
+            color = WorldCyan,
+            trackColor = WorldLine
+        )
+
+        ValueRow(
+            "Memory value",
+            "%.4f".format(memory)
+        )
+
+        LinearProgressIndicator(
+            progress = abs(memory).coerceIn(0f, 1f),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(6.dp),
+            color = WorldGreen,
+            trackColor = WorldLine
         )
     }
 }
 
 @Composable
-private fun WorldBar(
+private fun ConnectionRow(
+    connection: WorldConnection
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                WorldPanel,
+                RoundedCornerShape(9.dp)
+            )
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp)
+    ) {
+        ValueRow(
+            "Ikai ${connection.first + 1}  ↔  Ikai ${connection.second + 1}",
+            "%+.5f".format(connection.strength)
+        )
+
+        LinearProgressIndicator(
+            progress = abs(connection.strength).coerceIn(0f, 1f),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(6.dp),
+            color = if (connection.strength >= 0f) WorldGreen else WorldOrange,
+            trackColor = WorldLine
+        )
+    }
+}
+
+@Composable
+private fun Measurement(
     label: String,
     value: Float,
-    color: Color
+    color: Color,
+    display: String
 ) {
-    val safe = value.coerceIn(0f, 1f)
-
     Column(
         verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(label, color = WorldMuted)
-            Text("${(safe * 100).toInt()}%", color = color)
-        }
+        ValueRow(label, display)
 
         LinearProgressIndicator(
-            progress = safe,
+            progress = value.coerceIn(0f, 1f),
             modifier = Modifier
                 .fillMaxWidth()
                 .height(7.dp),
             color = color,
-            trackColor = Color(0xFF34445D)
+            trackColor = WorldLine
         )
     }
 }
 
 @Composable
-private fun WorldStatus(
+private fun SectionTitle(title: String) {
+    Text(
+        title,
+        color = WorldCyan
+    )
+}
+
+@Composable
+private fun ValueRow(
     label: String,
-    active: Boolean
+    value: String
 ) {
     Row(
-        Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(label, color = WorldMuted)
-
-        Text(
-            if (active) "CHALU" else "BAND",
-            color = if (active) WorldGreen else WorldOrange
-        )
+        Text(value, color = Color.White)
     }
+}
+
+@Composable
+private fun MeaningRow(
+    title: String,
+    meaning: String
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Text(title, color = WorldGreen)
+        Text(meaning, color = WorldMuted)
+    }
+}
+
+private fun percent(value: Float): String {
+    return "${(value.coerceIn(0f, 1f) * 100f).toInt()}%"
 }
